@@ -1,0 +1,3 @@
+# ninja log v5
+17570	30105	1674747053277382183	pybind11module.cpython-38-x86_64-linux-gnu.so	c38afbeebce0e7d6
+6	17569	1674747040733326753	CMakeFiles/pybind11module.dir/module/cplusplus_interface.cpp.o	aa6bafe4d2312941
