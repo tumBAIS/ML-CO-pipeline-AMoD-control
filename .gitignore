@@ -1,0 +1,9 @@
+data/historical_data*
+data/taxi_data_Manhattan_2015_preprocessed*
+full_information_solutions/
+learned_parameters/
+results/
+source_data_visualization/
+source_data_visualization_heatmap/
+training_instances
+visualization/evaluate*
