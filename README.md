@@ -1,4 +1,4 @@
-# Learning-based Online Algorithms for Autonomous Mobility-on-Demand fleet control
+# Learning-based Online Optimization for Autonomous Mobility-on-Demand Fleet Control
 
 This software learns a dispatching and rebalancing policy for autonomous-mobility on demand systems using a structured learning enriched combinatorial optimization pipeline.
 
