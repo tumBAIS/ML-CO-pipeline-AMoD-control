@@ -17,3 +17,4 @@ data/**/* filter=lfs diff=lfs merge=lfs -text
 *.graphml filter=lfs diff=lfs merge=lfs -text
 .csv filter=lfs diff=lfs merge=lfs -text
 *data/** filter=lfs diff=lfs merge=lfs -text
+data/taxi_data_Manhattan_2015/** filter=lfs diff=lfs merge=lfs -text
