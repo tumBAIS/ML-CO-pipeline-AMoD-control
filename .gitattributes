@@ -1,2 +1,13 @@
 data filter=lfs diff=lfs merge=lfs -text
+data/LookUP_Duration_250_250.npy filter=lfs diff=lfs merge=lfs -text
+data/LookUpGrid_250_250 filter=lfs diff=lfs merge=lfs -text
+data/LookUP_map_graph_idxs_250_250.npy filter=lfs diff=lfs merge=lfs -text
+data/movement-speeds-hourly-new-york-2020-1_preprocessed.csv filter=lfs diff=lfs merge=lfs -text
+data/read_in_best_learning_iteration.txt filter=lfs diff=lfs merge=lfs -text
+data/RebalancingGrid_150_150 filter=lfs diff=lfs merge=lfs -text
+data/vehDist filter=lfs diff=lfs merge=lfs -text
+data/LookUP_Distance_250_250.npy filter=lfs diff=lfs merge=lfs -text
+data/US_County_shape filter=lfs diff=lfs merge=lfs -text
+data/manhattan_graph.graphml filter=lfs diff=lfs merge=lfs -text
+data/** filter=lfs diff=lfs merge=lfs -text
 *data/** filter=lfs diff=lfs merge=lfs -text
