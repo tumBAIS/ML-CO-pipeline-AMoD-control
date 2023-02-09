@@ -3,7 +3,8 @@
 This software learns a dispatching and rebalancing policy for autonomous-mobility on demand systems using a structured learning enriched combinatorial optimization pipeline.
 
 This method is proposed in:
-> Link to paper
+> Kai Jungel, Axel Parmentier, Maximilian Schiffer, and Thibaut Vidal. Learning-based Online Optimization for Autonomous Mobility-on-Demand Fleet
+Control. arXiv preprint: [arXiv:2302.03963](https://arxiv.org/abs/2302.03963), 2023.
 
 
 This repository contains all relevant scripts and data sets to reproduce the results from the paper. We assume using *slurm*.
