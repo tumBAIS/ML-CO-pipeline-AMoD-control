@@ -29,8 +29,8 @@ The structure of the repository is as follows:
 - `run_pipeline.py`: Main file to process the pipeline
 - `training.py`: Script to train the *policy_SB* and *policy_CB*
 
-*Remark*: We use taxi trip data from https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page . So far, we did not upload the taxi trip data to this repository. 
-Download the data and store each day of trip data as a single .csv file in the `./data/taxi_data_Manhattan_2015_preprocessed` directory. 
+*Remark*: We use taxi trip data from https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page . We uploaded the taxi trip data we used to this repository. 
+Alternatively, you can download the data and store each day of trip data as a single .csv file in the `./data/taxi_data_Manhattan_2015_preprocessed/month-XX` directory. 
 We specify the name and the format of the .csv file in `./data/taxi_data_Manhattan_2015_preprocessed/taxi_data_format.txt` .
 
 ## Overview
