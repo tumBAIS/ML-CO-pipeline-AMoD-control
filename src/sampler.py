@@ -152,14 +152,6 @@ class Sampler:
             # 5. Get dropoff time
             new_requests["tpep_dropoff_datetime"] = new_requests["tpep_pickup_datetime"] + pd.to_timedelta(new_requests["ride_duration"], unit="seconds")
 
-            print("This was newely added")
             new_requests = new_requests.sort_values(by=["tpep_dropoff_datetime"])
 
         return new_requests
-
-
-
-
-
-
-

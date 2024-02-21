@@ -1,15 +1,40 @@
 from src import util
 from src.environment import Environment
 from pipeline.graph_generator import GraphGenerator
-from pipeline.predictor import Predictor
 from pipeline.combinatorial_optimization import CombinatorialOptimizer
 from pipeline.decoder import Decoder
 import pandas as pd
 import time
+from pipeline.predictors.Linear import LinearModel
+from pipeline.predictors.NeuralNetwork import NNModel
+from pipeline.predictors.Greedy import GreedyModel
+
+
+def get_solution(args, edges, weights, len_vehicleList, graph_generator, combinatorial_optimizer):
+
+    # add dummy edges
+    edges_graph, weights_graph = graph_generator.generate_graph(edges, weights)
+    edgesList_graph, weightsList_graph = graph_generator.get_edges_weights_lists(edges_graph, weights_graph)
+
+    # run_k_disjoint shortest path
+    k, edges, time_needed_k_disjoint = combinatorial_optimizer.solve_optimization_problem(edges=edgesList_graph, weights=weightsList_graph, num_vertices=graph_generator.artificial_dummy_sink_index + 1, num_k=len_vehicleList)
+
+    # delete dummy edges
+    if args.policy == "policy_CB":
+        edges, _ = graph_generator.resolve_dummy_edges_mapping(edges)
+
+    return edges, time_needed_k_disjoint
+
+
+def get_predictor(args, rebalancing_grid, clock):
+    predictors = {"Linear": LinearModel, "NN": NNModel, "Greedy": GreedyModel}
+    predictor = predictors[args.model](args, rebalancing_grid=rebalancing_grid, clock=clock)
+    predictor.load_model()
+    return predictor
 
 
 class Pipeline:
-    def __init__(self, args, random_state, optim_param=None):
+    def __init__(self, args, random_state):
         args = util.check_args_compatibility(args)  # check if arguments are compatible with each other
         args = util.define_costs_per_km(args)
         util.create_directories(args)  # create missing directories
@@ -18,7 +43,7 @@ class Pipeline:
         self.continue_running = True  # as long as true the pipeline runs
         self.environment = Environment(args, random_state)  # environment representing Manhattan
         self.graph_generator = GraphGenerator(args, self.environment.look_up_grid)  # ... generates the dispatching graph
-        self.predictor = Predictor(args, optim_param=optim_param, rebalancing_grid=self.environment.rebalancing_grid, clock=self.environment.clock)  # ... predicts the weights on the edges
+        self.predictor = get_predictor(args, rebalancing_grid=self.environment.rebalancing_grid, clock=self.environment.clock)  # ... predicts the weights on the edges
         self.combinatorial_optimizer = CombinatorialOptimizer(args)  # solves the combinatorial optimization problem, namely k-dSPP
         self.decoder = Decoder(args)  # ... decodes the combinatorial solution to the action space
 
@@ -39,10 +64,7 @@ class Pipeline:
             "Avg_distance_trav": driving_distance / self.args.num_vehicles,
             "Time_kDisjoint": round(time_needed_k_disjoint, 3),
         }
-        print(f"New ride requests: {len(requestList)}")
-        print(f"Satisfied ride requests: {len(requests_in_solution)}")
-        print(f"Time needed for iteration: {round(self.time_end_pipeline - self.time_start_pipeline, 2)} seconds")
-        print(f"End of system time period: {self.environment.clock.actual_system_time_period_end}")
+        print(f"New / satisfied: {len(requestList)} / {len(requests_in_solution)} in {round(self.time_end_pipeline - self.time_start_pipeline, 2)} seconds")
         self.evaluationList.append(evaluationDict)
 
     def run(self):
@@ -59,7 +81,6 @@ class Pipeline:
 
         # we assign to each vehicle location an index of the look-up cell and the rebalancing cell
         vehicleList = self.environment.look_up_grid.calculateGridIndex(liste=self.environment.vehicleList, title_entry="index_Look_Up_Table_Dropoff", title_longitude="location_lon", title_latitude="location_lat")
-        print("Here we need to change finding rebalancing cell")
         vehicleList = self.environment.rebalancing_grid.calculateGridIndex(liste=vehicleList, title_entry="index_Rebalancing_Dropoff", title_longitude="location_lon", title_latitude="location_lat")
 
         # new ride requests enter the system
@@ -119,25 +140,26 @@ class Pipeline:
         # we initialize the C++ interface for the graph generator to generate the graph quickly
         self.graph_generator.fill_cplusplus_interface(requestList=requestList, vehicleList=vehicleList, artRebVertexList=artRebVerticesList)
         # the graph generator generates edges
-        edges_source_vehicles = self.graph_generator.calculate_edges_source_vehicle()
-        edges_vehicles_sink = self.graph_generator.calculate_edges_vehicle_sink()
-        edges_requests_sink = self.graph_generator.calculate_edges_rides_sink(requestList)
-        edges_vehicles_requests, edges_vehicles_requests_attributes = self.graph_generator.calculate_edges_vehicles_rides()
-        edges_requests_requests, edges_requests_requests_attributes = self.graph_generator.calculate_edges_requests_requests()
+        edges = {}
+        edges["source_vehicles"] = self.graph_generator.calculate_edges_source_vehicle()
+        edges["vehicles_sink"] = self.graph_generator.calculate_edges_vehicle_sink()
+        edges["requests_sink"] = self.graph_generator.calculate_edges_rides_sink(requestList)
+        edges["vehicles_requests"], edges_vehicles_requests_attributes = self.graph_generator.calculate_edges_vehicles_rides()
+        edges["requests_requests"], edges_requests_requests_attributes = self.graph_generator.calculate_edges_requests_requests()
 
         # if we prepare training or evaluate learned policies we have to calculate edges to future locations
         if self.args.policy in ["policy_SB", "policy_CB"]:
-            edges_vehicles_artRebVertices, edges_vehicles_artRebVertices_attributes = self.graph_generator.calculate_edges_vehicles_artLoc()
-            edges_requests_artRebVertices, edges_requests_artRebVertices_attributes = self.graph_generator.calculate_edges_rides_artLoc()
-            edges_artLocVertices_sink = self.graph_generator.calculate_edges_artLoc_sink(artRebVerticesList if self.args.policy == "policy_SB" else artCapVerticesList)
-            edges_artRebVertices_artCapVertices = self.graph_generator.calculate_edges_artRebVertices_artCapVertices(pd.DataFrame(artRebVerticesList), pd.DataFrame(artCapVerticesList))
+            edges["vehicles_artRebVertices"], edges_vehicles_artRebVertices_attributes = self.graph_generator.calculate_edges_vehicles_artLoc()
+            edges["requests_artRebVertices"], edges_requests_artRebVertices_attributes = self.graph_generator.calculate_edges_rides_artLoc()
+            edges["artLocVertices_sink"] = self.graph_generator.calculate_edges_artLoc_sink(artRebVerticesList if self.args.policy == "policy_SB" else artCapVerticesList)
+            edges["artRebVertices_artCapVertices"] = self.graph_generator.calculate_edges_artRebVertices_artCapVertices(pd.DataFrame(artRebVerticesList), pd.DataFrame(artCapVerticesList))
         else:
-            edges_vehicles_artRebVertices = []
+            edges["vehicles_artRebVertices"] = []
             edges_vehicles_artRebVertices_attributes = []
-            edges_requests_artRebVertices = []
+            edges["requests_artRebVertices"] = []
             edges_requests_artRebVertices_attributes = []
-            edges_artLocVertices_sink = []
-            edges_artRebVertices_artCapVertices = []
+            edges["artLocVertices_sink"] = []
+            edges["artRebVertices_artCapVertices"] = []
 
         # if we prepare training or evaluate learned policies we have to calculate the features related to vertices
         if self.args.policy in ["policy_SB", "policy_CB"]:
@@ -151,104 +173,65 @@ class Pipeline:
             if self.args.policy in ["policy_CB"]:
                 artCapVerticesList = self.predictor.feature_data.append_features_to_artCapVertices(artCapVerticesList=pd.DataFrame(artCapVerticesList))
 
-        # we add general attributes to the edges and assign features to edges if we prepare training or evaluate learned polices
-        edge_features = {}
-        edge_features["features_edges_vehicles_requests"], edges_vehicles_requests = self.predictor.feature_data.append_features_to_edges_vehicles_requests(edges_vehicles_requests, pd.DataFrame(vehicleList), pd.DataFrame(requestList), pd.DataFrame(edges_vehicles_requests_attributes))
-        edge_features["features_edges_requests_requests"], edges_requests_requests = self.predictor.feature_data.append_features_to_edges_requests_requests(edges_requests_requests, pd.DataFrame(requestList), pd.DataFrame(edges_requests_requests_attributes))
-        edge_features["features_edges_requests_artRebVertices"], edges_requests_artRebVertices = self.predictor.feature_data.append_features_to_edges_requests_artRebVertices(edges_requests_artRebVertices, pd.DataFrame(requestList), pd.DataFrame(artRebVerticesList), pd.DataFrame(edges_requests_artRebVertices_attributes))
-        edge_features["features_edges_vehicles_artRebVertices"], edges_vehicles_artRebVertices = self.predictor.feature_data.append_features_to_edges_vehicles_artRebVertices(edges_vehicles_artRebVertices, pd.DataFrame(vehicleList), pd.DataFrame(artRebVerticesList), pd.DataFrame(edges_vehicles_artRebVertices_attributes))
-        edge_features["features_edges_artRebVertices_artCapVertices"], edges_artRebVertices_artCapVertices = self.predictor.feature_data.append_features_to_edges_artRebVertices_artCapVertices(edges_artRebVertices_artCapVertices, pd.DataFrame(artRebVerticesList), pd.DataFrame(artCapVerticesList))
+        # we add general attributes to the edges and nodes and assign features to edges and nodes if we prepare training or evaluate learned polices
+        edge_attributes = {}
+        edge_attributes["features_edges_vehicles_requests"], edges["vehicles_requests"] = self.predictor.feature_data.append_features_to_edges_vehicles_requests(edges["vehicles_requests"], pd.DataFrame(vehicleList), pd.DataFrame(requestList), pd.DataFrame(edges_vehicles_requests_attributes))
+        edge_attributes["features_edges_requests_requests"], edges["requests_requests"] = self.predictor.feature_data.append_features_to_edges_requests_requests(edges["requests_requests"], pd.DataFrame(requestList), pd.DataFrame(edges_requests_requests_attributes))
+        edge_attributes["features_edges_requests_artRebVertices"], edges["requests_artRebVertices"] = self.predictor.feature_data.append_features_to_edges_requests_artRebVertices(edges["requests_artRebVertices"], pd.DataFrame(requestList), pd.DataFrame(artRebVerticesList), pd.DataFrame(edges_requests_artRebVertices_attributes))
+        edge_attributes["features_edges_vehicles_artRebVertices"], edges["vehicles_artRebVertices"] = self.predictor.feature_data.append_features_to_edges_vehicles_artRebVertices(edges["vehicles_artRebVertices"], pd.DataFrame(vehicleList), pd.DataFrame(artRebVerticesList), pd.DataFrame(edges_vehicles_artRebVertices_attributes))
+        edge_attributes["features_edges_artRebVertices_artCapVertices"], edges["artRebVertices_artCapVertices"] = self.predictor.feature_data.append_features_to_edges_artRebVertices_artCapVertices(edges["artRebVertices_artCapVertices"], pd.DataFrame(artRebVerticesList), pd.DataFrame(artCapVerticesList))
+
+        node_attributes = {}
+        node_attributes["features_nodes_vehicles"] = self.predictor.feature_data.get_node_features(vehicleList, ["origin"], ["on_trip_till"])
+        node_attributes["features_nodes_requests"] = self.predictor.feature_data.get_node_features(requestList, ["origin", "destination", "future"], ["tpep_pickup_datetime", "tpep_dropoff_datetime"])
+        node_attributes["features_nodes_artRebVertices"] = self.predictor.feature_data.get_node_features(artRebVerticesList, ["location"] if self.args.policy == "policy_CB" else ["destination", "future"], [])
+        node_attributes["features_nodes_artCapVertices"] = self.predictor.feature_data.get_node_features(artCapVerticesList, ["capacity"], [])
 
         # if we evaluate the SB or CB policy we standardize features
-        print("We must enable standardization again!!!")
         if self.args.mode == "evaluation" and self.args.policy in ["policy_SB", "policy_CB"]:
-            edge_features = self.predictor.feature_data.standardize(edge_features)
+            edge_attributes = self.predictor.feature_data.standardize(edge_attributes)
 
         # we predict the weights on edges to artificial requests
-        weights_source_vehicles = self.predictor.calculate_weights_source_vehicles(edges_source_vehicles)
-        weights_vehicles_requests = self.predictor.calculate_weights_vehicles_requests(edge_features["features_edges_vehicles_requests"])
-        weights_requests_requests = self.predictor.calculate_weights_requests_requests(edge_features["features_edges_requests_requests"])
-        weights_vehicles_sink = self.predictor.calculate_weights_vehicles_sink(edges_vehicles_sink)
-        weights_requests_sink = self.predictor.calculate_weights_requests_sink(edges_requests_sink)
-        weights_vehicles_artRebVertices = self.predictor.calculate_weights_vehicles_artRebVertices(edge_features["features_edges_vehicles_artRebVertices"])
-        weights_requests_artRebVertices = self.predictor.calculate_weights_requests_artRebVertices(edge_features["features_edges_requests_artRebVertices"])
-        weights_artRebVertices_artCapVertices = self.predictor.calculate_weights_artRebVertices_artCapVertices(edge_features["features_edges_artRebVertices_artCapVertices"])
-        weights_artLocVertices_sink = self.predictor.calculate_weights_artLocVertices_sink(edges_artLocVertices_sink)
-
+        edge_features, node_features = self.predictor.retrieve_features(edge_attributes, node_attributes)
+        weights = self.predictor.predict_weights(edge_features, node_features, edges, edge_attributes)
 
         # if we evaluate the sampling benchmark, we multiply the weights on edges to artificial requests with a discount factor to prioritize real requests
         if self.args.policy == "sampling":
-            weights_requests_requests = self.graph_generator.reduce_weights_to_artificialVertices(edges_requests_requests, weights_requests_requests, clock=self.environment.clock, verticesList=verticesList)
-            weights_vehicles_requests = self.graph_generator.reduce_weights_to_artificialVertices(edges_vehicles_requests, weights_vehicles_requests, clock=self.environment.clock, verticesList=verticesList)
+            weights["requests_requests"] = self.graph_generator.reduce_weights_to_artificialVertices(edges["requests_requests"], weights["requests_requests"], clock=self.environment.clock, verticesList=verticesList)
+            weights["vehicles_requests"] = self.graph_generator.reduce_weights_to_artificialVertices(edges["vehicles_requests"], weights["vehicles_requests"], clock=self.environment.clock, verticesList=verticesList)
 
         if self.args.mode not in ["create_training_instance"]:
-            # the graph generator creates the graph
-            edgeList, weightsList = self.graph_generator.generate_graph(edges_source_vehicles=edges_source_vehicles,
-                                                                        edges_vehicles_requests=edges_vehicles_requests,
-                                                                        edges_requests_requests=edges_requests_requests,
-                                                                        edges_vehicles_artRebVertices=edges_vehicles_artRebVertices,
-                                                                        edges_requests_artRebVertices=edges_requests_artRebVertices,
-                                                                        edges_artRebVertices_artCapVertices=edges_artRebVertices_artCapVertices,
-                                                                        edges_vehicles_sink=edges_vehicles_sink,
-                                                                        edges_requests_sink=edges_requests_sink,
-                                                                        edges_artLocVertices_sink=edges_artLocVertices_sink,
-                                                                        weights_source_vehicles=weights_source_vehicles,
-                                                                        weights_vehicles_requests=weights_vehicles_requests,
-                                                                        weights_requests_requests=weights_requests_requests,
-                                                                        weights_vehicles_artRebVertices=weights_vehicles_artRebVertices,
-                                                                        weights_requests_artRebVertices=weights_requests_artRebVertices,
-                                                                        weights_artRebVertices_artCapVertices=weights_artRebVertices_artCapVertices,
-                                                                        weights_vehicles_sink=weights_vehicles_sink,
-                                                                        weights_requests_sink=weights_requests_sink,
-                                                                        weights_artLocVertices_sink=weights_artLocVertices_sink)
-
-            # we sole the combinatorial optimization problem -> k-dSPP
-            k, edges, time_needed_k_disjoint = self.combinatorial_optimizer.solve_optimization_problem(edges=edgeList, weights=weightsList, num_vertices=self.graph_generator.sink_index+1, num_k=len(vehicleList))
-
-            if self.args.policy == "policy_CB":
-                edges, _ = self.graph_generator.resolve_dummy_edges_mapping(edges)
-
+            edgesList_solution, time_needed_k_disjoint = get_solution(self.args, edges, weights, len(vehicleList), self.graph_generator, self.combinatorial_optimizer)
         else:
             if self.args.save_data_visualization:
-                edges = [edge for edgelist in full_information_solution_edges.values() for edge in edgelist]
-                edges = edges + [(0, vehicle_idx) for vehicle_idx in list(range(1, 1 + len(vehicleList)))]
+                edgesList_solution = [edge for edgelist in full_information_solution_edges.values() for edge in edges]
             else:
-                edges = edges_source_vehicles + edges_vehicles_sink
+                edgesList_solution = edges["source_vehicles"] + edges["vehicles_sink"]
 
         # the decoder transforms the k-dSPP in coherent vehicle trips
-        vehicleTrips, verticesIndexVehiclemapping = self.decoder.get_graph(edges, num_vehicles=len(vehicleList), len_verticesList=len(verticesList), idx_bins=idx_bins)
+        vehicleTrips, verticesIndexVehiclemapping = self.decoder.get_graph(edgesList_solution, num_vehicles=len(vehicleList), len_verticesList=len(verticesList), idx_bins=idx_bins)
 
         # we save the data for later visualization purpose
         if self.args.save_data_visualization:
-            util.save_data_visualization(args=self.args, solution_edges=edges, vehicleRoutes=vehicleTrips, vehicleList=vehicleList, verticesList=verticesList,
+            util.save_data_visualization(args=self.args, solution_edges=edgesList_solution, vehicleRoutes=vehicleTrips, vehicleList=vehicleList, verticesList=verticesList,
                                          requestList=requestList, clock=self.environment.clock)
 
         if self.args.mode == 'evaluation':
             vehicles_in_solution, requests_in_solution, locations_in_solution = self.environment.extract_served_vertices(verticesIndexVehiclemapping, verticesList)
         # we save the full-information solution
         if self.args.mode == "create_full_information_solution":
-            util.save_full_information_solution(self.args, vehicleList, requestList, vehicleTrips, verticesIndexVehiclemapping, edges)
+            util.save_full_information_solution(self.args, vehicleList, requestList, vehicleTrips, verticesIndexVehiclemapping, edgesList_solution)
         # to generate training instances we need to save the epoch instance and the respective full-information solution
         if self.args.mode == "create_training_instance":
-            util.save_training_data(args=self.args, edges={"edges_source_vehicles": edges_source_vehicles,
-                                              "edges_vehicles_requests": edges_vehicles_requests,
-                                              "edges_requests_requests": edges_requests_requests,
-                                              "edges_vehicles_artRebVertices": edges_vehicles_artRebVertices,
-                                              "edges_requests_artRebVertices": edges_requests_artRebVertices,
-                                              "edges_artRebVertices_artCapVertices": edges_artRebVertices_artCapVertices,
-                                              "edges_vehicles_sink": edges_vehicles_sink,
-                                              "edges_requests_sink": edges_requests_sink,
-                                              "edges_artLocVertices_sink": edges_artLocVertices_sink},
+            util.save_training_data(args=self.args, edges=edges,
                                        full_information_solution_edges=full_information_solution_edges, vehicleList=vehicleList,
-                                       edge_features=edge_features,
+                                       edge_attributes=edge_attributes, node_attributes=node_attributes,
                                        look_up_grid=self.environment.look_up_grid, verticesList=verticesList)
 
         # the environment relocates the vehicles according to the vehicle trips in the solution
-
         if self.args.mode not in ["create_training_instance"]:
             vehicleList, driving_distance = self.environment.update_vehicle_list(vehicleTrips=vehicleTrips, verticesList=verticesList, vehicleList=vehicleList)
             self.environment.vehicleList = self.predictor.delete_feature_columns_vehicle(pd.DataFrame(vehicleList))
-
 
         self.time_end_pipeline = time.time()
         if self.args.mode == "evaluation":

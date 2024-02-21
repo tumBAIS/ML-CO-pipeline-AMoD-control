@@ -7,9 +7,9 @@ import pandas as pd
 import copy
 from src.environment import Environment
 import json
-import matplotlib.pyplot as plt
 import scipy.stats as st
 from src import config
+
 
 def calculate_starting_distribution(args):
     def calculate_full_information_solutions(days, times):
@@ -81,17 +81,6 @@ def calculate_starting_distribution(args):
             instance_output_file = open(args.vehDistribution_directory + args.vehDistribution_file, "w")
             json.dump(distribution_dict, instance_output_file)
             instance_output_file.close()
-
-            """pdf = make_pdf(distribution, best_fit_params)
-            # Display
-            plt.figure(figsize=(12, 8))
-            ax = pdf.plot(lw=2, label='PDF', legend=True)
-            plt.hist(data, bins=50, density=True, alpha=0.5, label='Data')
-            ax.set_xlabel("Seconds for how long vehicle is on trip")
-            ax.set_ylabel("Frequency")
-            plt.title("Distribution of seconds for how long vehicle is on trip.")
-            plt.show()"""
-
 
     days = [datetime(year=2015, month=1, day=7), datetime(year=2015, month=1, day=8), datetime(year=2015, month=1, day=9),
             datetime(year=2015, month=1, day=12), datetime(year=2015, month=1, day=13)]

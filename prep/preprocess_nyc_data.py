@@ -2,7 +2,6 @@ from src import config, util
 import pandas as pd
 import os
 from shapely.geometry import Point
-import geopandas as gpd
 
 
 def preprocess_nyc_data(args, months):
@@ -34,7 +33,6 @@ def preprocess_nyc_data(args, months):
 
             taxi_data = pd.DataFrame(updated_taxi_data)
             taxi_data.to_csv("." + args.directory_data + args.processed_ride_data_directory + "/month-{:02}/".format(month) + filename, index=False)
-
 
 
 if __name__ == '__main__':

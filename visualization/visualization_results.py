@@ -1,3 +1,4 @@
+import itertools
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
@@ -30,6 +31,16 @@ def get_abbreviation(x_tick):
         return util.get_abb_standardization()
     elif x_tick == "fix_capacity":
         return util.get_abb_max_cap()
+    elif x_tick == "learning_rate":
+        return util.get_abb_learning_rate()
+    elif x_tick == "normalization":
+        return util.get_abb_normalization()
+    elif x_tick == "num_layers":
+        return util.get_abb_number_layers()
+    elif x_tick == "hidden_units":
+        return util.get_abb_hidden_units()
+    elif x_tick == "model":
+        return util.get_abb_model()
     else:
         raise Exception
 
@@ -42,7 +53,7 @@ def check_condition(filename, condition):
         if key in ["result_directory", "policy"]:
             continue
         key_abb = get_abbreviation(key)
-        instance_parameter = filename.split(key_abb + "-")[-1].split("_")[0].split("/")[0]
+        instance_parameter = filename.split("_" + key_abb + "-")[-1].split("_")[0].split("/")[0]
         if instance_parameter == "amount":
             instance_parameter = "amount_satisfied_customers"
         if key == "extended_horizon":
@@ -62,7 +73,6 @@ class Result_file():
         self.directory = directory
         self.get_times()
 
-
     def check_if_NoResult_file(self):
         if self.filename.find("Result_obj") == -1:
             return True
@@ -72,17 +82,21 @@ class Result_file():
     def get_mode(self):
         if "sampling" in self.directory:
             self.mode = "sampling"
-        if "greedy" in self.directory:
+        elif "greedy" in self.directory:
             self.mode = "greedy"
-        if "policy_CB" in self.directory:
-            self.mode = "policy_CB"
-        if "policy_SB" in self.directory:
-            self.mode = "policy_SB"
-        if "offline" in self.directory:
+        elif "policy_CB" in self.directory and "Linear" in self.directory:
+            self.mode = "CB_Linear"
+        elif "policy_SB" in self.directory and "Linear" in self.directory:
+            self.mode = "SB_Linear"
+        elif "policy_CB" in self.directory and "NN" in self.directory:
+            self.mode = "CB_NN"
+        elif "policy_SB" in self.directory and "NN" in self.directory:
+            self.mode = "SB_NN"
+        elif "offline" in self.directory:
             self.mode = "offline"
 
     def get_iteration(self):
-        if self.mode in ["policy_CB", "policy_SB"]:
+        if self.mode in ["CB_Linear", "SB_Linear", "CB_NN", "SB_NN"]:
             self.iteration = int(self.filename.split("_it-")[-1].split("_")[0])
         else:
             self.iteration = -1
@@ -91,7 +105,6 @@ class Result_file():
         self.start_time = datetime.strptime(self.filename.split("_startDat-")[-1].split("_")[0], '%Y-%m-%d %H:%M:%S')
         self.end_time = datetime.strptime(self.filename.split("endDat-")[-1].split("_")[0], '%Y-%m-%d %H:%M:%S')
         self.system_time_period = float(self.filename.split("sysTimePeriod-")[-1].split("_")[0])
-
 
     def get_objective_value(self, metric):
         evaluation_data = pd.read_csv(self.directory + self.filename)
@@ -110,33 +123,38 @@ class Result_file():
         else:
             raise Exception("Wrong metric defined.")
 
-
-
-
     def get_x_tick(self, x_label):
-        x_label_app = get_abbreviation(x_label)
-        x_tick = (self.directory + self.filename).split(x_label_app + "-")[-1].split("_")[0].split("/")[0]
-        try:
-            self.x_tick = float(x_tick)
-        except:
-            self.x_tick = x_tick
+        def convert_x_tick(x_tick):
+            try:
+                return float(x_tick)
+            except:
+                return x_tick
 
-def get_file_attributes(directory, filename, conditions, x_label, metric):
+        x_label_app = [get_abbreviation(x_lab) for x_lab in x_label]
+        x_ticks = [(self.directory + self.filename).split(x_lab_app + "-")[-1].split("_")[0].split("/")[0] for x_lab_app in x_label_app]
+        self.x_tick = tuple([convert_x_tick(x_tick) for x_tick in x_ticks])
+
+
+def get_file_attributes(directory, filename, conditions, x_label, metric, x_tick):
     file = Result_file(filename, directory)
     if (check_condition(directory + file.filename, conditions["condition_general"]) or file.check_if_NoResult_file()):
         return -1
     file.get_objective_value(metric=metric)
     file.get_mode()
-    if file.mode == "policy_CB":
-        skip = check_condition(directory + file.filename, conditions["condition_CB"])
-    elif file.mode == "policy_SB":
-        skip = check_condition(directory + file.filename, conditions["condition_SB"])
+    if file.mode == "CB_Linear":
+        skip = check_condition(directory + file.filename, conditions["condition_CB_Linear"][x_tick])
+    elif file.mode == "SB_Linear":
+        skip = check_condition(directory + file.filename, conditions["condition_SB_Linear"][x_tick])
+    elif file.mode == "CB_NN":
+        skip = check_condition(directory + file.filename, conditions["condition_CB_NN"][x_tick])
+    elif file.mode == "SB_NN":
+        skip = check_condition(directory + file.filename, conditions["condition_SB_NN"][x_tick])
     elif file.mode == "sampling":
-        skip = check_condition(directory + file.filename, conditions["condition_sampling"])
+        skip = check_condition(directory + file.filename, conditions["condition_sampling"][x_tick])
     elif file.mode == "offline":
-        skip = check_condition(directory + file.filename, conditions["condition_offline"])
+        skip = check_condition(directory + file.filename, conditions["condition_offline"][x_tick])
     elif file.mode == "greedy":
-        skip = check_condition(directory + file.filename, conditions["condition_greedy"])
+        skip = check_condition(directory + file.filename, conditions["condition_greedy"][x_tick])
     else:
         raise Exception("There is a wrong mode in the dictionary")
     if skip:
@@ -144,8 +162,6 @@ def get_file_attributes(directory, filename, conditions, x_label, metric):
     file.get_iteration()
     file.get_x_tick(x_label=x_label)
     return file
-
-
 
 
 def add_file_to_saver(saver, file):
@@ -161,7 +177,7 @@ def choose_best_learning_iteration(saver):
         best_iteration_saver[mode] = OrderedDict()
         for x_tick in saver[mode].keys():
             best_value = -1
-            best_iteration = -1
+            best_iteration = 1  #-1
             for learning_iteration in saver[mode][x_tick].keys():
                 mean_value = sum(saver[mode][x_tick][learning_iteration]) / len(saver[mode][x_tick][learning_iteration])
                 if mean_value > best_value:
@@ -171,32 +187,50 @@ def choose_best_learning_iteration(saver):
             print(f"Best learning iteration mode {mode} - x_tick {x_tick}: {best_iteration}")
     return best_iteration_saver
 
+
 def mean_all_iterations(saver):
     for mode in saver.keys():
         for x_tick in saver[mode].keys():
             saver[mode][x_tick] = np.mean(list(saver[mode][x_tick].values()), axis=0)
     return saver
 
-def fill_saver(directories, results_saver, conditions, x_label, metric):
-    for directory in directories:
-        for filename in os.listdir(directory):
-            file = get_file_attributes(directory, filename, conditions, x_label, metric)
-            if file == -1:
-                continue
-            else:
-                results_saver = add_file_to_saver(results_saver, file)
+
+def fill_saver(directories, results_saver, conditions, modes, x_ticks, x_label, metric):
+    for mode in modes:
+        for x_tick in x_ticks:
+            if os.path.isdir(directories[mode][x_tick]):
+                for filename in os.listdir(directories[mode][x_tick]):
+                    file = get_file_attributes(directories[mode][x_tick], filename, conditions, x_label, metric, x_tick)
+                    if file == -1:
+                        continue
+                    else:
+                        results_saver = add_file_to_saver(results_saver, file)
     return results_saver
 
 
+def convert_x_tick(x_tick):
+    def convert_type(x_tick_item):
+        if isinstance(x_tick_item, timedelta):
+            return float(x_tick_item.seconds / 60)
+        else:
+            if "." in x_tick_item:
+                return float(x_tick_item)
+            else:
+                try:
+                    return int(x_tick_item)
+                except:
+                    return x_tick_item
+
+    x_tick = [convert_type(x_tick_item) for x_tick_item in x_tick]
+    return tuple(x_tick)
+
+
 def create_result_saver(x_ticks, modes):
+
     results_saver = OrderedDict()
     for mode in modes:
         results_saver[mode] = OrderedDict()
         for x_tick in x_ticks:
-            if isinstance(x_tick, timedelta):
-                x_tick = float(x_tick.seconds / 60)
-            else:
-                x_tick = float(x_tick)
             results_saver[mode][x_tick] = OrderedDict()
     return results_saver
 
@@ -210,14 +244,18 @@ def sort_directories(saver):
 def replace_with_mean(saver):
     for mode in saver.keys():
         for x_tick in saver[mode].keys():
-            saver[mode][x_tick] = sum(saver[mode][x_tick]) / len(saver[mode][x_tick])
+            if len(saver[mode][x_tick]) > 0:
+                saver[mode][x_tick] = sum(saver[mode][x_tick]) / len(saver[mode][x_tick])
+            else:
+                saver[mode][x_tick] = 0
     return saver
 
 
 def set_best_learning_iteration(saver, best_learning_iteration):
     for mode in saver.keys():
         for x_tick in saver[mode].keys():
-            saver[mode][x_tick] = saver[mode][x_tick][best_learning_iteration[mode][x_tick]]
+            if len(saver[mode][x_tick]) > 0:
+                saver[mode][x_tick] = saver[mode][x_tick][best_learning_iteration[mode][x_tick]]
     return saver
 
 
@@ -225,7 +263,8 @@ def get_y_lim(metric, type):
     y_lim_saver = {"service_ratio": {"ratio": (-13, 15)}, "km_per_request": {"ratio": (0, 120)},  "avg_distance_trav": {"ratio": (0, 80)}}
     return y_lim_saver[metric][type]
 
-def plot(saver, type, metric, x_label, running_type, boxplot=False):
+
+def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=False):
     tikzplotlib_axis_parameters = {"samplingHyperparameterSelection": ["xmajorticks=true", "xlabel style={below=12mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
                                                                        "ytick style={draw=none}"],
                                    "samplingReduceFutureSelect": ["xmajorticks=true", "xlabel style={align=center, below=7.7mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true",
@@ -244,7 +283,7 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
 
 
     patches_dict = {"vehicleTest": {"profit": {"absolute": (((1800, 31000), 400, 34000), (1700, 27000)),
-                                               "ratio": (((1800, -1.5), 400, 10), (2300, 7))},
+                                               "ratio": (((1800, -1.5), 400, 10), (2300, 6))},
                                "amount_satisfied_customers": {"absolute": (((1800, 2.8), 400, 3.2), (1700, 2.5)),
                                                               "ratio": (((1800, -1), 400, 10), (1700, -2.5))}},
                "sparsityTest": {"profit": {"absolute": (((0.26, 31000), 0.08, 45000), (0.25, 25000)), "ratio": (((0.26, -2), 0.08, 9.5), (0.14, 8.3))}}}
@@ -254,17 +293,22 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
         "greedy": {"color": "#98C6EA", "marker": "o", "label": "greedy"},
         "sampling": {"color": "#005293", "marker": "*", "label": "sampling"},
         "offline": {"color": "#003359", "marker": "+", "label": "FI"},
-        "policy_SB": {"color": "#E37222", "marker": "v", "label": "SB"},
-        "policy_CB":{"color": "#A2AD00", "marker": "x", "label": "CB"}
+        "SB_Linear": {"color": "#E37222", "marker": "v", "label": "SBLinear"},
+        "CB_Linear":{"color": "#A2AD00", "marker": "x", "label": "CBLinear"},
+        "SB_NN": {"color": "red", "marker": "v", "label": "SBNN"},
+        "CB_NN": {"color": "black", "marker": "x", "label": "CBNN"}
     }
     x_label_name = {"num_vehicles": "Fleet size", "extended_horizon": "Extended horizon [hour:min:sec]",
                     "reduce_weight_of_future_requests_factor": "Factor reducing weights \\\\ to requests in prediction horizon",
                     "heuristic_distance_range": "Maximum distance to next request [km]", "heuristic_time_range": "Maximum time to next request [sec]",
-                    "sparsity_factor": "Request density", "fix_capacity": "Num. of capacity vertices \\\\ in rebalancing cells"}
+                    "sparsity_factor": "Request density", "fix_capacity": "Num. of capacity vertices \\\\ in rebalancing cells", "learning_rate": "Learning rate",
+                    "hidden_units": "Hidden Units", "normalization": "Normalization", "num_layers": "Number layers", "standardization": "Standardization"}
 
     def get_model(model):
         if model == "offline":
             return "FI"
+        elif "_" in model:
+            return "~".join(model.split("_"))
         else:
             return model
 
@@ -275,7 +319,7 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
     plt.rc('font', size=14)
     sns.set_style('whitegrid', {'axes.labelcolor': 'black'})  # darkgrid, white grid, dark, white and ticksplt.rc('axes', titlesize=18)     # fontsize of the axes title
     sns.color_palette('deep')
-    fig, ax = plt.subplots(figsize=(6, 4.24))
+    fig, ax = plt.subplots(figsize=(8, 6))
 
     modes = list(saver.keys())
     if type == "absolute":
@@ -301,7 +345,10 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
         modes.remove("greedy")
         modes.remove("offline")
         if metric == "profit":
-            y_label = 'Increase of profit \\\\ compared to greedy bench. [%]'
+            if twitter:
+                y_label = 'Increase of profit \n compared to greedy bench. [%]'
+            else:
+                y_label = 'Increase of profit \\\\ compared to greedy bench. [%]'
         elif metric == "amount_satisfied_customers":
             y_label = 'Increase of num. sat. ride req. \\\\ compared to greedy bench. [%]'
         elif metric == "service_ratio":
@@ -323,10 +370,11 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
             plt.xticks(ticks=list(range(len(saver[mode].values()))), labels=x_labels, rotation=90)
             print([f"{mode} : {x_tick} :{np.sum(saver[mode][x_tick]) / len(saver[mode][x_tick])}" for x_tick in saver[mode].keys()])
         else:
-            #print(mode + f":{[factor * x for x in [(saver[mode][x_tick] - subtrahend[x_tick]) / denominator[x_tick] for x_tick in saver[mode].keys()]]}")
-            plt.plot(list(saver[mode].keys()), [factor * x for x in [(saver[mode][x_tick] - subtrahend[x_tick]) / denominator[x_tick] for x_tick in saver[mode].keys()]],
-                     color=visualization[mode]["color"], marker=visualization[mode]["marker"], label=get_model(mode.split("_")[-1]) + label_suffix)
-            #print(y_label + ": " + mode + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - subtrahend[x_tick]) / denominator[x_tick] for x_tick in saver[mode].keys()]])))
+            try:
+                plt.plot(list(saver[mode].keys()), [factor * x for x in [(saver[mode][x_tick] - subtrahend[x_tick]) / denominator[x_tick] for x_tick in saver[mode].keys()]],
+                         color=visualization[mode]["color"], marker=visualization[mode]["marker"], label=get_model(mode) + label_suffix)  # mode.split("_")[-1]
+            except:
+                print("Hier")
             if type == "ratio" and running_type in ["vehicleTest", "sparsityTest"]:
                 print("Comparison : " + mode + " / greedy" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison : " + mode + " / sampling" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
@@ -334,18 +382,13 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
                 print("Comparison MAX : " + mode + " / sampling" + ": " + str(np.max([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison MIN : " + mode + " / greedy" + ": " + str(np.min([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison MIN : " + mode + " / sampling" + ": " + str(np.min([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
-                x_tick_base = 2000 if running_type == "vehicleTest" else 0.3
-                print("Comparison BASE : " + mode + " / greedy" + ": " + str(factor * (saver[mode][x_tick_base] - saver["greedy"][x_tick_base]) / saver["greedy"][x_tick_base]))
-                print("Comparison BASE : " + mode + " / sampling" + ": " + str(factor * (saver[mode][x_tick_base] - saver["sampling"][x_tick_base]) / saver["sampling"][x_tick_base]))
-                if running_type == "vehicleTest":
-                    print("Comparison 500 : " + mode + " / greedy" + ": " + str(factor * (saver[mode][500] - saver["greedy"][500]) / saver["greedy"][500]))
-                    print("Comparison 500 : " + mode + " / sampling" + ": " + str(factor * (saver[mode][500] - saver["sampling"][500]) / saver["sampling"][500]))
+                print("WE NEED TO ENABLE THIS!!!!!!")
                 if running_type == "sparsityTest":
                     print("Comparison 0.4 : " + mode + " / greedy" + ": " + str(factor * (saver[mode][0.4] - saver["greedy"][0.4]) / saver["greedy"][0.4]))
                     print("Comparison 0.4 : " + mode + " / sampling" + ": " + str(factor * (saver[mode][0.4] - saver["sampling"][0.4]) / saver["sampling"][0.4]))
                     print("Comparison HIGHER : " + mode + " / greedy" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
                     print("Comparison HIGHER : " + mode + " / sampling" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
-    plt.xlabel(x_label_name[x_label])
+    plt.xlabel([x_label_name[x_lab] for x_lab in x_label])
     plt.ylabel(y_label)
     plt.legend()
     if running_type in patches_dict.keys():
@@ -356,11 +399,9 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False):
                 ax.add_patch(rect)
                 ax.text(x_text, y_text, "Base scenario", style='italic')
     fig.tight_layout()
-    tikzplotlib.save("./visualization/evaluate_{}_{}_{}_{}.tex".format(running_type, x_label, metric, type if running_type != "hyperparameterSelection" else type + "_" + mode),
+    tikzplotlib.save("./visualization/evaluateNN_{}_{}_{}_{}.tex".format(running_type, x_label, metric, type if running_type != "hyperparameterSelection" else type + "_" + mode),
                      extra_axis_parameters=tikzplotlib_axis_parameters[running_type if running_type in tikzplotlib_axis_parameters.keys() else type])
     plt.show()
-
-
 
 
 def divide_by_value(saver, metric):
@@ -374,10 +415,16 @@ def divide_by_value(saver, metric):
     return saver
 
 
-
 class ArgsKeeper():
-    def __init__(self):
+    def __init__(self, modes, x_labels, x_ticks):
+        self.x_ticks = x_ticks
+        self.x_labels = x_labels
+        self.modes = modes
         self.result_directory = None
+        self.dict = {x_tick: {mode: {} for mode in self.modes} for x_tick in self.x_ticks}
+        self.reset_args()
+
+    def reset_args(self):
         self.policy = None
         self.num_vehicles = None
         self.sparsity_factor = None
@@ -387,122 +434,171 @@ class ArgsKeeper():
         self.standardization = None
         self.heuristic_distance_range = None
         self.heuristic_time_range = None
+        self.model = None
         self.mode = "evaluation"
         self.reduce_weight_of_future_requests_factor = None
-        self.dict = {}
+        self.learning_rate = None
+        self.normalization = None
+        self.num_layers = None
+        self.hidden_units = None
 
-    def set_values(self, conditions):
-        for condition in conditions:
-            self.dict[condition] = conditions[condition]
+    def get_values(self, keys):
+        values = []
+        for key in keys:
+            values.append(self.dict[key])
+        return values
 
-    def set_value(self, key, value):
-        if key == "result_directory":
-            self.result_directory = value
-        elif key == "policy":
-            self.policy = value
-        elif key == "num_vehicles":
-            self.num_vehicles = value
-        elif key == "sparsity_factor":
-            self.sparsity_factor = value
-        elif key == "objective":
-            self.objective = value
-        elif key == "extended_horizon":
-            self.extended_horizon = value
-        elif key == "fix_capacity":
-            self.fix_capacity = value
-        elif key == "reduce_weight_of_future_requests_factor":
-            self.reduce_weight_of_future_requests_factor = value
-        elif key == "heuristic_distance_range":
-            self.heuristic_distance_range = value
-        elif key == "heuristic_time_range":
-            self.heuristic_time_range = value
-        elif key == "standardization":
-            self.standardization = value
+    def set_values(self, modes, conditions, x_labels):
+        for mode in modes:
+            if sorted(list(conditions.keys())) != sorted(self.x_ticks):
+                for x_tick in self.x_ticks:
+                    # when we set the parameter values and the value is a list, this means that we consider a label, then we get the value from the x_ticks.
+                    mapping_xtick_value = {parameter: value for parameter, value in zip(x_labels, x_tick)}
+                    for condition in conditions:
+                        value = conditions[condition]
+                        if isinstance(value, list):
+                            self.dict[x_tick][mode][condition] = mapping_xtick_value[condition]
+                        else:
+                            self.dict[x_tick][mode][condition] = value
+            else:
+                for x_tick, condition_lab in conditions.items():
+                    for condition in condition_lab.keys():
+                        self.dict[x_tick][mode][condition] = condition_lab[condition]
 
-    def get_args(self):
-        for key in self.dict.keys():
-            self.set_value(key, self.dict[key])
+    def set_value(self, keys, values):
+        for key, value in zip(keys, values):
+            if key == "result_directory":
+                self.result_directory = value
+            elif key == "policy":
+                self.policy = value
+            elif key == "num_vehicles":
+                self.num_vehicles = value
+            elif key == "sparsity_factor":
+                self.sparsity_factor = value
+            elif key == "objective":
+                self.objective = value
+            elif key == "extended_horizon":
+                self.extended_horizon = value
+            elif key == "fix_capacity":
+                self.fix_capacity = value
+            elif key == "reduce_weight_of_future_requests_factor":
+                self.reduce_weight_of_future_requests_factor = value
+            elif key == "heuristic_distance_range":
+                self.heuristic_distance_range = value
+            elif key == "heuristic_time_range":
+                self.heuristic_time_range = value
+            elif key == "standardization":
+                self.standardization = value
+            elif key == "learning_rate":
+                self.learning_rate = value
+            elif key == "normalization":
+                self.normalization = value
+            elif key == "num_layers":
+                self.num_layers = value
+            elif key == "hidden_units":
+                self.hidden_units = value #[value] * 2
+            elif key == "model":
+                self.model = value
+
+    def get_args(self, x_tick, mode):
+        for key in self.dict[x_tick][mode].keys():
+            self.set_value([key], [self.dict[x_tick][mode][key]])
 
 
-def get_x_label(args_keeper):
-    for key in args_keeper.dict:
-        if isinstance(args_keeper.dict[key], list):
-            break
-    return key
+def get_x_label(conditions):
+    x_label = []
+    for key in conditions.keys():
+        if isinstance(conditions[key], list):
+            x_label.append(key)
+    return x_label
 
-def get_results_directories(args_keeper, x_label):
-    directories = []
-    args_keeper.get_args()
-    for specification in args_keeper.dict[x_label]:
-        args_keeper.set_value(key=x_label, value=specification)
-        directories.append(util.get_result_directory(args_keeper))
+
+def get_results_directories(args_keeper, mode, x_tick):
+    args_keeper.get_args(x_tick, mode)
+    result_directory = util.get_result_directory(args_keeper)
+    args_keeper.reset_args()
+    return result_directory
+
+
+def get_metadata(conditions):
+    modes = []
+    for condition in conditions.keys():
+        if "general" in condition:
+            continue
+        else:
+            modes.append("_".join(condition.split("condition_")[1:]))
+
+    x_labels = get_x_label(conditions["condition_general"])
+    x_ticks = list(itertools.product(*[conditions["condition_general"][x_label] for x_label in x_labels]))
+    x_ticks = [convert_x_tick(x_tick) for x_tick in x_ticks]
+    args_keeper = ArgsKeeper(modes, x_labels, x_ticks)
+    args_keeper.set_values(modes=modes, conditions=conditions["condition_general"], x_labels=x_labels)
+    return args_keeper
+
+
+def generate_relevant_directories(args_keeper, conditions, result_directory):
+    args_keeper.set_value(["result_directory"], [result_directory])
+    directories = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    for mode in args_keeper.modes:
+        args_keeper.set_values([mode], conditions[f"condition_{mode}"], args_keeper.x_labels)
+        for x_tick in args_keeper.x_ticks:
+            directories[mode][x_tick] = get_results_directories(args_keeper, mode, x_tick)
     return directories
 
 
-def generate_relevant_directories(conditions, result_directory):
-    modes = []
-    conditions["condition_general"] = {**conditions["condition_general"], **{"result_directory": result_directory}}
-    directories = []
-    args_keeper = ArgsKeeper()
-    args_keeper.set_values(conditions["condition_general"])
-    x_label = get_x_label(args_keeper)
-    # greedy
-    if "condition_greedy" in conditions.keys():
-        args_keeper.set_values(conditions["condition_greedy"])
-        directories += get_results_directories(args_keeper, x_label)
-        modes.append("greedy")
-    # sampling
-    if "condition_sampling" in conditions.keys():
-        args_keeper.set_values(conditions["condition_sampling"])
-        directories += get_results_directories(args_keeper, x_label)
-        modes.append("sampling")
-    # offline
-    if "condition_offline" in conditions.keys():
-        args_keeper.set_values(conditions["condition_offline"])
-        directories += get_results_directories(args_keeper, x_label)
-        modes.append("offline")
-    # policy_SB
-    if "condition_SB" in conditions.keys():
-        args_keeper.set_values(conditions["condition_SB"])
-        directories += get_results_directories(args_keeper, x_label)
-        modes.append("policy_SB")
-    # policy_CB
-    if "condition_CB" in conditions.keys():
-        args_keeper.set_values(conditions["condition_CB"])
-        directories += get_results_directories(args_keeper, x_label)
-        modes.append("policy_CB")
-    return directories, x_label, modes
+def update_conditions(conditions, x_ticks):
+    condition_new = {}
+    for condition_key, condition_value in conditions.items():
+        if "general" in condition_key:
+            condition_new[condition_key] = condition_value
+        else:
+            if sorted([convert_x_tick(x_tick) for x_tick in condition_value.keys()]) == sorted(x_ticks):
+                condition_new[condition_key] = {key: value for key, value in zip([convert_x_tick(x_tick) for x_tick in condition_value.keys()], condition_value.values())}
+            else:
+                condition_new[condition_key] = {x_tick: condition_value for x_tick in x_ticks}
+    return condition_new
 
 
-def visualize_results(conditions, running_type, metric):
+def visualize_results(conditions, running_type, metric, twitter=False, running_type_validation=None):
+    if running_type_validation is None:
+        running_type_validation = running_type
+    args_keeper = get_metadata(conditions)
+    conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
 
-    test_directories, x_label, modes = generate_relevant_directories(conditions, result_directory=f"./results/results_{running_type}_test")
-    validation_directories, x_label, modes = generate_relevant_directories(conditions, result_directory=f"./results/results_{running_type}_validation")
+    test_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type}_test")
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type_validation}_validation")
 
-    test_results_saver = create_result_saver(x_ticks=conditions["condition_general"][x_label], modes=modes)
-    validation_results_saver = create_result_saver(x_ticks=conditions["condition_general"][x_label], modes=modes)
-    validation_results_saver = fill_saver(validation_directories, validation_results_saver, conditions, x_label, metric="profit")
+    test_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    validation_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    validation_results_saver = fill_saver(validation_directories, validation_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     best_learning_iteration = choose_best_learning_iteration(validation_results_saver)
-    test_results_saver = fill_saver(test_directories, test_results_saver, conditions, x_label, metric)
-    print("Delete test_results_saver and add validation_results_saver")
+    test_results_saver = fill_saver(test_directories, test_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     test_results_saver = set_best_learning_iteration(test_results_saver, best_learning_iteration)
     test_results_saver = sort_directories(test_results_saver)
     test_results_saver = divide_by_value(test_results_saver, metric)
     results_saver = replace_with_mean(test_results_saver)
 
-    plot(results_saver, type="absolute", metric=metric, x_label=x_label, running_type=running_type)
-    plot(results_saver, type="ratio", metric=metric, x_label=x_label, running_type=running_type)
+    plot(results_saver, type="ratio", metric=metric, x_label=args_keeper.x_labels, running_type=running_type)
+
 
 def evaluate_hyperparameters(conditions, running_type, metric):
-    validation_directories, x_label, modes = generate_relevant_directories(conditions, result_directory=f"./results/results_{running_type}_validation")
-    hyperparameters_results_saver = create_result_saver(x_ticks=conditions["condition_general"][x_label], modes=modes)
-    hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, x_label, metric)
+    args_keeper = get_metadata(conditions)
+    conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type}_validation")
+    hyperparameters_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     best_learning_iteration = choose_best_learning_iteration(hyperparameters_results_saver)
     hyperparameters_results_saver = set_best_learning_iteration(hyperparameters_results_saver, best_learning_iteration)
     hyperparameters_results_saver = sort_directories(hyperparameters_results_saver)
     hyperparameters_results_saver = divide_by_value(hyperparameters_results_saver, metric)
 
-    plot(hyperparameters_results_saver, type="absolute", metric=metric, x_label=x_label, boxplot=True, running_type=running_type)
+    for key in hyperparameters_results_saver.keys():
+        best_hyp = max(hyperparameters_results_saver[key], key= lambda x: np.mean(hyperparameters_results_saver[key][x]))
+        print(f"The best hyperparameters in {key} are {best_hyp} with: {np.mean(hyperparameters_results_saver[key][best_hyp])}.")
+
+    plot(hyperparameters_results_saver, type="absolute", metric=metric, x_label=args_keeper.x_labels, boxplot=True, running_type=running_type)
+    results_saver = replace_with_mean(hyperparameters_results_saver)
+    #plot(results_saver, type="ratio", metric=metric, x_label=x_label, running_type=running_type)
 
 
 def extract_learned_parameters(conditions, running_type, metric, directory_parameters):
@@ -620,11 +716,6 @@ def extract_learned_parameters(conditions, running_type, metric, directory_param
                     print(str(index_one) + " & " + get_name(keys_list[index_one]) + " & " + str(round_number(parameter_list[index_one])) + " & & & "  + "\\\\")
                 except:
                     print('\033[93m' + keys_list[index_one] + '\033[0m')
-        #if uneven:
-        #    try:
-        #        print(str(index_two + 1) + " & " + get_name(keys_list[index_two + 1]) + " & " + str(round(parameter_list[index_two + 1], 3)) + " & & & "  + "\\\\")
-        #    except:
-        #        print('\033[93m' + keys_list[index_two + 1] + '\033[0m')
         print("\\toprule")
     print("\end{tabular}} \n\
 \\caption{" + caption[learning_type] + "} \n\
@@ -643,7 +734,6 @@ def get_computational_time(conditions, running_type, metric):
     hyperparameters_results_saver = sort_directories(hyperparameters_results_saver)
     computational_time = divide_by_value(hyperparameters_results_saver, metric)
 
-
     for x_label in computational_time[list(computational_time.keys())[0]]:
         print("& " + str(x_label), end='')
     print("\\\\")
@@ -656,8 +746,11 @@ def get_computational_time(conditions, running_type, metric):
 
 
 def show_learning_evolution(parameter_directory, inner_evaluation, outer_evaluation):
-    inner_evaluation = json.load(open(parameter_directory + inner_evaluation))
-    outer_evaluation = json.load(open(parameter_directory + outer_evaluation))
+    inner_evaluation_values = json.load(open(parameter_directory + inner_evaluation))
+    if outer_evaluation is not None:
+        outer_evaluation = json.load(open(parameter_directory + outer_evaluation))
+    else:
+        outer_evaluation = {"parameter_evolution": []}
 
     # get outer ticks
     def parameters_identical(parameters1, parameters2):
@@ -670,20 +763,97 @@ def show_learning_evolution(parameter_directory, inner_evaluation, outer_evaluat
     outer_epochs = []
     outer_evaluation["loss_evolution"] = []
     for outer_parameters in outer_evaluation["parameter_evolution"]:
-        for epoch_idx, inner_parameters in enumerate(inner_evaluation["parameter_evolution"]):
+        for epoch_idx, inner_parameters in enumerate(inner_evaluation_values["parameter_evolution"]):
             if parameters_identical(outer_parameters, inner_parameters):
                 outer_epochs.append(epoch_idx)
-                outer_evaluation["loss_evolution"].append(inner_evaluation["loss_evolution"][epoch_idx])
+                outer_evaluation["loss_evolution"].append(inner_evaluation_values["loss_evolution"][epoch_idx])
 
 
-    plt.plot(inner_evaluation["loss_evolution"], color="blue")
+    plt.plot(inner_evaluation_values["loss_evolution"], color="blue")
     plt.scatter(outer_epochs, outer_evaluation["loss_evolution"], color="red")
-    plt.title("Evolution of loss during training")
+    plt.title(f"Evolution of loss during training \n {parameter_directory} \n {inner_evaluation}", fontsize=8)
     plt.xlabel("Training epochs")
     plt.ylabel("Loss")
     plt.show()
 
+    if "edges_to_request_evolution" in inner_evaluation_values.keys():
+        plt.plot(inner_evaluation_values["edges_to_request_evolution"])
+        plt.title("Edges to requests evolution")
+        plt.show()
 
+
+def sanity_check(sanity_directory, policy):
+    sanity_value_FY_dict = {"Linear": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}, "NN": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}}
+    sanity_value_model_dict = {"Linear": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}, "NN": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}}
+    for sanity_file_name in os.listdir(sanity_directory):
+        if "Sanity" not in sanity_file_name:
+            continue
+        if policy not in sanity_file_name:
+            continue
+        fleet_size = int(sanity_file_name.split(f"_{util.get_abbreviation_fleetSize()}-")[1].split("_")[0])
+        model = sanity_file_name.split(f"_{util.get_abb_model()}-")[1].split("_")[0]
+        sanity_list_values = json.load(open(sanity_directory + sanity_file_name, "r"))
+        sanity_list_values_array = np.array(sanity_list_values)
+        sanity_value_FY_dict[model][fleet_size] = np.mean(sanity_list_values_array[:, 0])
+        sanity_value_model_dict[model][fleet_size] = np.mean(sanity_list_values_array[:, 1])
+
+    # Compare FY of Linear and NN
+    x_Linear, y_Linear = zip(*sorted(sanity_value_FY_dict["Linear"].items()))
+    plt.plot(x_Linear, y_Linear, color="blue", label="Loss~Linear~model")
+    x_NN, y_NN = zip(*sorted(sanity_value_FY_dict["NN"].items()))
+    plt.plot(x_NN, y_NN, color="red", label="Loss~NN~model")
+    plt.legend()
+    #plt.title(policy)
+    plt.ylabel("Loss value")
+    plt.xlabel("Fleet size")
+
+    tikzplotlib.save(f"./visualization/comparisonLossLinearNN{policy}.tex")
+
+    plt.show()
+
+    # Compare FY_NN model_NN
+    x_NN_model, y_NN_model = zip(*sorted(sanity_value_model_dict["NN"].items()))
+    x_NN_FY, y_NN_FY = zip(*sorted(sanity_value_FY_dict["NN"].items()))
+    plt.plot(x_NN_FY, np.nan_to_num((np.array(y_NN_FY) - np.array(y_NN_model)) / np.array(y_NN_model), posinf=0), color="red")
+    plt.legend()
+    plt.title(policy + "\n y_NN_FY: NN loss with perturbation \n y_NN_model: NN loss without perturbation")
+    plt.ylabel("(y_NN_FY - y_NN_model) / y_NN_model")
+    plt.xlabel("Fleet size")
+    plt.tight_layout()
+    plt.show()
+
+
+def sanity_check_performance(sanity_performance_directory, policy):
+    sanity_value_dict = {"Linear": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}, "NN": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}}
+    sanity_value_request_dict = {"Linear": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}, "NN": {500: 0, 1000: 0, 2000: 0, 3000: 0, 4000: 0, 5000: 0}}
+    for sanity_file_name in os.listdir(sanity_performance_directory):
+        if "Sanity" not in sanity_file_name:
+            continue
+        if "performance" not in sanity_file_name:
+            continue
+        if policy not in sanity_file_name:
+            continue
+        fleet_size = int(sanity_file_name.split(f"_{util.get_abbreviation_fleetSize()}-")[1].split("_")[0])
+        model = sanity_file_name.split(f"_{util.get_abb_model()}-")[1].split("_")[0]
+        if "performance" in model:
+            model = model.split("--")[0]
+        sanity_list_values = json.load(open(sanity_performance_directory + sanity_file_name, "r"))
+        sanity_array_values = np.array(sanity_list_values)
+        sanity_value_dict[model][fleet_size] = sanity_array_values[:, 0]
+        sanity_value_request_dict[model][fleet_size] = sanity_array_values[:, 1]
+
+    x_Linear, y_Linear = zip(*sorted(sanity_value_dict["Linear"].items()))
+    x_NN, y_NN = zip(*sorted(sanity_value_dict["NN"].items()))
+    plt.boxplot(((np.array(y_NN) - np.array(y_Linear)) / np.array(y_Linear)).T)
+    plt.xticks([1, 2, 3, 4, 5, 6], [500, 1000, 2000, 3000, 4000, 5000])
+    plt.legend()
+    plt.ylabel("$f = (g_{NN} - g_{Linear}) / g_{Linear}$")
+    plt.xlabel("Fleet size")
+    plt.tight_layout()
+
+    tikzplotlib.save(f"./visualization/comparisonEqualityLinearNN{policy}.tex")
+
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -731,6 +901,41 @@ if __name__ == '__main__':
         "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100"}},
                              running_type="testmaxcapacity", metric="profit")"""
 
+    # Hyperparameter deep learning
+    """evaluate_hyperparameters(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": "5000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
+                              "sparsity_factor": "0.3", "extended_horizon": timedelta(minutes=5),
+                              "learning_rate": ["0.1", "0.001"], "hidden_units": ["10.0", "1000.0"], "num_layers": ["0", "3"],
+                              "normalization": "0", "standardization": ["100", "0"]},
+        "condition_SB_NN": {"policy": "policy_SB", "model": "NN"}},
+        running_type="hyperparameterDeepLearning", metric="profit")"""
+
+    """evaluate_hyperparameters(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": "5000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
+                              "sparsity_factor": "0.3", "extended_horizon": timedelta(minutes=5),
+                              "learning_rate": ["0.1", "0.001"], "hidden_units": ["10.0", "1000.0"], "num_layers": ["0", "3"],
+                              "normalization": "0", "standardization": ["100", "0"]},
+        "condition_CB_NN": {"policy": "policy_CB", "fix_capacity": "1", "model": "NN"}},
+        running_type="hyperparameterDeepLearning", metric="profit")"""
+
+    """evaluate_hyperparameters(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+                                  "condition_greedy": {"policy": "greedy"},
+                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+                                  "condition_offline": {"policy": "offline"},
+                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
+                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}},
+        running_type="vehicleTest", metric="profit")"""
+
+    """evaluate_hyperparameters(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}},
+        #"condition_SB_NN": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "NN", "learning_rate": "0.005", "hidden_units": "50.0"},
+        #"condition_CB_NN": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.05", "hidden_units": "10.0"}},
+                             running_type="vehicleTest", metric="profit")"""
 
     """get_computational_time(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
                                   "condition_greedy": {"policy": "greedy"},
@@ -739,22 +944,46 @@ if __name__ == '__main__':
                                   "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
                                   "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="calculation_time")"""
 
-
     # EVALUATE DIFFERENT VEHICLE FLEET SIZES
-    visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
                                   "condition_greedy": {"policy": "greedy"},
                                   "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
                                   "condition_offline": {"policy": "offline"},
-                                  "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                  "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="profit")
+                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
+                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}}, running_type="vehicleTest", metric="profit")"""
 
-    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "1.0"]},
-                                      "condition_greedy": {"policy": "greedy"},
-                                      "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                      "condition_offline": {"policy": "offline"},
-                                      "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                      "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="sparsityTest", metric="profit")"""
 
+    # EVALUATE DIFFERENT VEHICLE FLEET SIZES and DEEP LEARNING BENCHMARKS
+    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+                                  "condition_greedy": {"policy": "greedy"},
+                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+                                  "condition_offline": {"policy": "offline"},
+                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
+                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"},
+                                  "condition_SB_NN": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "NN", "learning_rate": "0.005", "hidden_units": "50.0"},
+                                  "condition_CB_NN": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.05", "hidden_units": "10.0"}},
+                      running_type="vehicleTest", metric="profit")"""
+
+    """visualize_results(conditions={
+            "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+            "condition_greedy": {"policy": "greedy"},
+            "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+            "condition_offline": {"policy": "offline"},
+            "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
+            "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"},
+            "condition_SB_NN": {("500", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "10.0", "normalization": "0"},
+                                ("1000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
+                                ("2000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
+                                ("3000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
+                                ("4000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
+                                ("5000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"}},
+            "condition_CB_NN": {("500", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
+                                ("1000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
+                                ("2000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
+                                ("3000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
+                                ("4000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
+                                ("5000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"}}},
+                          running_type="vehicleTestHyperparameter", running_type_validation="vehicleTestHyperparameter", metric="profit")"""
 
     """visualize_results(conditions={
         "condition_general": {"objective": "amount_satisfied_customers", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
@@ -800,7 +1029,24 @@ if __name__ == '__main__':
                                   "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"}},
                                running_type="vehicleTest", metric="profit", directory_parameters="./learned_parameters/learned_parameters_policy_SB_2000_0.3_profit_0:05:00_0/Learning_outer-obj-profit_hoSi-5.0_fleetSi-2000_pert-50.0,1.0")"""
 
+    """show_learning_evolution(parameter_directory="./learned_parameters/learned_parameters_policy_SB_1000_0.3_profit_0:05:00_0/",
+                            inner_evaluation="Learning_inner-obj-profit_hoSi-5.0_fleetSi-1000_pert-50.0,1.0",
+                            outer_evaluation="Learning_outer-obj-profit_hoSi-5.0_fleetSi-1000_pert-50.0,1.0")"""
 
-    """show_learning_evolution(parameter_directory="./learned_parameters/learned_parameters_policy_SB_500_0.3_amount_satisfied_customers_0:05:00_100/",
-        inner_evaluation="Learning_inner-obj-amount_satisfied_customers_hoSi-5.0_fleetSi-500_pert-50.0,1.0",
-        outer_evaluation="Learning_outer-obj-amount_satisfied_customers_hoSi-5.0_fleetSi-500_pert-50.0,1.0")"""
+    """show_learning_evolution(parameter_directory="./learned_parameters/learned_parameters_policy_CB_500_0.3_profit_0:05:00_0/",
+        inner_evaluation="Learning_inner-obj-profit_hoSi-5.0_fleetSi-500_pert-10.0,1.0_m-Linear",
+        outer_evaluation="Learning_outer-obj-profit_hoSi-5.0_fleetSi-500_pert-10.0,1.0_m-Linear")"""
+
+    """show_learning_evolution(parameter_directory="./learned_parameters_20231213/learned_parameters_policy_CB_500_0.3_profit_0:05:00_100/",
+                            inner_evaluation="Learning_inner-obj-profit_hoSi-5.0_fleetSi-500_pert-50.0,1.0_m-Linear",
+                            outer_evaluation="Learning_outer-obj-profit_hoSi-5.0_fleetSi-500_pert-50.0,1.0_m-Linear")"""
+
+    """show_learning_evolution(parameter_directory=f"./learned_parameters_20240212/learned_parameters_policy_SB_4000_0.3_profit_0:05:00_0/",
+                            inner_evaluation=f"Learning-obj-profit_hoSi-5.0_fleetSi-4000_pert-50.0,1.0_m-NN_lr-0.1_hu-1000.0_nrm-0_nl-3", outer_evaluation=None)"""
+
+    # SANITY CHECK
+    """sanity_check(sanity_directory="./sanity_check_20240212/", policy="policy_CB")
+    sanity_check(sanity_directory="./sanity_check_20240212/", policy="policy_SB")"""
+
+    """sanity_check_performance(sanity_performance_directory="./sanity_check_performance_20240212/", policy="policy_CB")
+    sanity_check_performance(sanity_performance_directory="./sanity_check_performance_20240212/", policy="policy_SB")"""

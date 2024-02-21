@@ -15,6 +15,7 @@ This repository contains all relevant scripts and data sets to reproduce the res
 The structure of the repository is as follows:
 - `cplusplus`: contains a C++ interface to run computationally intensive functions in C++
 - `data`: contains all relevant data to reproduce the data
+- `learning_problem`: contains learning files to solve the structured learning problem
 - `pipeline`: contains code which specifies the objects of the pipeline
 - `prep`: contains code to preprocess the data
 - `src`: contains helper files
@@ -27,11 +28,15 @@ The structure of the repository is as follows:
 - `run_bash_createInstances.cmd`: Script to rebuild digraph solution from full-information solution
 - `run_bash_training.cmd`: Script to start training.py to train the *policy_SB* and *policy_CB*
 - `run_pipeline.py`: Main file to process the pipeline
+- `sanity_check.py`: Script to compare the Fenchel-Young loss and predictor loss
+- `sanity_check_performance.py`: Script to compare the pipeline solution and the true solution
 - `training.py`: Script to train the *policy_SB* and *policy_CB*
 
 *Remark*: We use taxi trip data from https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page . We uploaded the taxi trip data we used to this repository. 
 Alternatively, you can download the data and store each day of trip data as a single .csv file in the `./data/taxi_data_Manhattan_2015_preprocessed/month-XX` directory. 
 We specify the name and the format of the .csv file in `./data/taxi_data_Manhattan_2015_preprocessed/taxi_data_format.txt` .
+
+Install dependencies with `pip install -r requirements.txt`.
 
 ## Overview
 The execution of the code follows a three-step approach:

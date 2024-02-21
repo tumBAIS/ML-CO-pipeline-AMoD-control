@@ -17,9 +17,8 @@ class Feature_data():
         self.dict = self.write_feature_set()
         self.clock = clock
         self.historical_data = HistoricalData(self.args, self.rebalancing_grid, self.clock, get_historical_data=False)
-        if self.args.policy in ["policy_SB", "policy_CB"] and self.args.mode == "evaluation":
+        if self.args.policy in ["policy_SB", "policy_CB"] and self.args.mode in ["evaluation", "sanity_check"]:
             self.standardization_values = self.load_standardization_values()
-
 
     def update_data(self, clock, vehicleList, requestList):
         self.clock = clock
@@ -35,8 +34,8 @@ class Feature_data():
             with np.errstate(divide='ignore', invalid='ignore'):
                 travelTime_array_timeSlot_day = np.divide(self.travelTime_array_timeSlot_day, self.frequency_array_timeSlot_day_original)
                 distanceKM_array_timeSlot_day = np.divide(self.distanceKM_array_timeSlot_day, self.frequency_array_timeSlot_day_original)
+                self.mean_travel_reward_value = 100 * (np.nanmean(np.divide(self.payment_array_timeSlot_day, self.frequency_array_timeSlot_day_original))) if self.args.objective == "profit" else 100
             self.mean_travel_time_value = np.nanmean(travelTime_array_timeSlot_day)
-            self.mean_travel_reward_value = 100 * (np.nanmean(np.divide(self.payment_array_timeSlot_day, self.frequency_array_timeSlot_day_original))) if self.args.objective == "profit" else 100
             self.mean_travel_rewardPerTime = self.args.time_span_sec * (self.mean_travel_reward_value / self.mean_travel_time_value)
             self.mean_travel_distance_value = np.nanmean(distanceKM_array_timeSlot_day)
             self.mean_travel_distancePerTime = self.args.time_span_sec * (self.mean_travel_distance_value / self.mean_travel_time_value)
@@ -47,7 +46,6 @@ class Feature_data():
         self.travelTime_array_timeSlot_day = self.historical_data.load_travel_time()
         self.distanceKM_array_timeSlot_day = self.historical_data.load_distance()
         self.payment_array_timeSlot_day = self.historical_data.load_payments()
-
 
     def get_request_and_vehicle_counts(self, vehiclesList, requestsList):
         # create count of vehicles per cell
@@ -140,7 +138,6 @@ class Feature_data():
                                          "rebalancing_starting": arriving_at_cell.reshape(-1).tolist()})
         return rebalancing_grid
 
-
     def get_time_features(self, grid_Pandas, on_sampled_vertices=False, prefix=""):
 
         # Feature 1: Duration of trip
@@ -228,7 +225,6 @@ class Feature_data():
 
         return features
 
-
     def get_features_relation(self, edgesList):
         edgesList["distance_to_request"] = edgesList["distance_km"]
         edgesList["duration_to_request"] = edgesList["duration_sec"]
@@ -246,7 +242,6 @@ class Feature_data():
         edgesList["duration_to_location"] = edgesList["duration_sec"]
         return edgesList
 
-
     def get_relevant_feature_names(self, list_of_sets):
         return [feature_name for set in list_of_sets for feature_name in self.dict[f"learning_vector_{set}"].keys()]
 
@@ -263,8 +258,8 @@ class Feature_data():
         def standardize_features(training_instance_features):
             relevant_features = [feature for feature in training_instance_features.columns if feature in self.standardization_values.keys()]
             training_instance_features[relevant_features] = training_instance_features[relevant_features] * pd.Series(self.standardization_values)[relevant_features]
-            training_instance_features[relevant_features].fillna(0, inplace=True)
-            training_instance_features[relevant_features].replace([np.inf, -np.inf], 0, inplace=True)
+            training_instance_features[relevant_features] = training_instance_features[relevant_features].fillna(0)
+            training_instance_features[relevant_features] = training_instance_features[relevant_features].replace([np.inf, -np.inf], 0)
 
         standardize_features(training_instance["features_edges_vehicles_requests"])
         standardize_features(training_instance["features_edges_requests_requests"])
@@ -306,13 +301,11 @@ class Feature_data():
         json.dump(multiplicator, standardization_values)
         self.standardization_values = multiplicator
 
-
     def get_features_origin(self, verticesList):
         verticesList = self.get_ratio_features(vertices=verticesList, type="origin", prefix="origin_distribution_")
         verticesList = verticesList.merge(self.sampling_features.add_prefix("origin_prediction_"), how="left", left_on="index_Rebalancing_Dropoff", right_index=True)
         verticesList = verticesList.merge(self.rebalancing_features.add_prefix("origin_"), how="left", left_on="index_Rebalancing_Dropoff", right_index=True)
         return verticesList
-
 
     def get_features_destination(self, verticesList):
         verticesList = self.get_ratio_features(vertices=verticesList, type="destination", prefix="destination_distribution_")
@@ -320,14 +313,12 @@ class Feature_data():
         verticesList = verticesList.merge(self.rebalancing_features.add_prefix("destination_"), how="left", left_on="index_Rebalancing_Pickup", right_index=True)
         return verticesList
 
-
     def get_features_future(self, verticesList):
         verticesList = self.get_time_features(verticesList)
         if self.args.policy in ["policy_SB"]:
             verticesList = self.get_features_smoothing(verticesList)
         verticesList["objective_feature"] = verticesList["objective_value"]
         return verticesList
-
 
     def get_features_location(self, verticesList):
         verticesList = self.get_ratio_features(vertices=verticesList, type="destination", prefix="rebalancinglocation_")
@@ -345,7 +336,6 @@ class Feature_data():
         verticesList["capacity_objective_feature"] = verticesList["objective_value"]
         verticesList = self.get_time_features(verticesList, on_sampled_vertices=True, prefix="capacity_")
         return verticesList
-
 
     def append_features(self, verticesList, feature_sets, old_columns):
         getter = {"origin": self.get_features_origin,
@@ -366,12 +356,10 @@ class Feature_data():
         verticesList = verticesList[old_columns + relevant_feature_names]
         return verticesList.to_dict("records")
 
-
     def append_features_to_requests(self, requestsList):
         old_columns_request = list(requestsList.columns)
         requestsList = self.append_features(requestsList, ["origin", "destination", "future"], old_columns=old_columns_request)
         return requestsList
-
 
     def append_features_to_artRebVertices(self, artRebVerticesList):
         old_columns_artificialVertices = list(artRebVerticesList.columns)
@@ -381,18 +369,27 @@ class Feature_data():
             artRebVerticesList = self.append_features(artRebVerticesList, ["destination", "future"], old_columns=old_columns_artificialVertices)
         return artRebVerticesList
 
-
     def append_features_to_artCapVertices(self, artCapVerticesList):
         old_columns_capacities = list(artCapVerticesList.columns)
         artCapVerticesList = self.append_features(artCapVerticesList, ["capacity"], old_columns=old_columns_capacities)
         return artCapVerticesList
-
 
     def append_features_to_vehicles(self, vehicleList):
         old_columns_vehicle = list(vehicleList.columns)
         vehicleList = self.append_features(vehicleList, ["origin"], old_columns=old_columns_vehicle)
         return vehicleList
 
+    def get_node_features(self, vertices, feature_sets, additional_features):
+        if len(vertices) == 0:
+            return pd.DataFrame()
+        if self.args.policy in ["policy_SB", "policy_CB"]:
+            node_features = self.get(pd.DataFrame(vertices), feature_sets, additional_features)
+            if len(additional_features) > 0:
+                for additional_feature in additional_features:
+                    node_features[additional_feature] = (node_features[additional_feature] - self.clock.actual_system_time_period_start).dt.total_seconds()
+        else:
+            node_features = pd.DataFrame(vertices)
+        return node_features
 
     def get(self, vertices, feature_sets, additional_features):
         return vertices[self.get_relevant_feature_names(feature_sets) + additional_features]
@@ -409,7 +406,6 @@ class Feature_data():
         assert num_edges == len(edges_vehicles_requests)
         return edges_vehicles_requests, [tuple(edge) for edge in edges_vehicles_requests[["starting", "arriving"]].values.tolist()] if len(edges_vehicles_requests) > 0 else []
 
-
     def append_features_to_edges_requests_requests(self, edges_requests_requests, requestList, edges_requests_requests_attributes):
         if len(edges_requests_requests) == 0:
             return pd.DataFrame(), []
@@ -423,7 +419,6 @@ class Feature_data():
             edges_requests_requests = self.get_features_relation(edges_requests_requests)
         assert num_edges == len(edges_requests_requests)
         return edges_requests_requests, [tuple(edge) for edge in edges_requests_requests[["starting", "arriving"]].values.tolist()]
-
 
     def append_features_to_edges_requests_artRebVertices(self, edges_requests_artRebVertices, requestList, artRebVerticesList, edges_requests_artRebVertices_attributes):
         if len(edges_requests_artRebVertices) == 0:
@@ -443,7 +438,6 @@ class Feature_data():
         assert num_edges == len(edges_requests_artRebVertices)
         return edges_requests_artRebVertices, [tuple(edge) for edge in edges_requests_artRebVertices[["starting", "arriving"]].values.tolist()]
 
-
     def append_features_to_edges_vehicles_artRebVertices(self, edges_vehicles_artRebVertices, vehiclesList, artRebVerticesList, edges_vehicles_artRebVertices_attributes):
         if len(edges_vehicles_artRebVertices) == 0:
             return pd.DataFrame(), []
@@ -462,7 +456,6 @@ class Feature_data():
         assert num_edges == len(edges_vehicles_artRebVertices)
         return edges_vehicles_artRebVertices, [tuple(edge) for edge in edges_vehicles_artRebVertices[["starting", "arriving"]].values.tolist()]
 
-
     def append_features_to_edges_artRebVertices_artCapVertices(self, edges_artRebVertices_artCapVertices, artRebVerticesList, artCapVerticesList):
         if len(edges_artRebVertices_artCapVertices) == 0:
             return pd.DataFrame(), []
@@ -472,7 +465,6 @@ class Feature_data():
             edges_artRebVertices_artCapVertices = edges_artRebVertices_artCapVertices.merge(artCapVerticesList, left_on="arriving", right_on="vertex_idx")
         assert num_edges == len(edges_artRebVertices_artCapVertices)
         return edges_artRebVertices_artCapVertices, [tuple(edge) for edge in edges_artRebVertices_artCapVertices[["starting", "arriving"]].values.tolist()]
-
 
     def write_feature_set(self):
         feature_set = OrderedDict([
@@ -572,8 +564,6 @@ class Feature_data():
                 ("capacity_counter", 1),
             ])),
         ])
-        print("We added city features here - delete!!!!")
-        print("We change name of smooth features - change!!!")
         if self.args.policy == "policy_SB":
             for idx in range(1, 26):
                 ### SMOOTHING
@@ -591,7 +581,6 @@ class Feature_data():
             for feature in feature_set[classe].keys():
                 feature_set[classe][feature] = 0
         return feature_set
-
 
     def get_average_historical_data(self, vertices):
         # 1. Get average trip duration
@@ -611,8 +600,9 @@ class Feature_data():
         if self.args.objective == "amount_satisfied_customers":
             payments = np.array([100] * len(distance_km))
         else:
-            payments = np.nanmean(np.divide(self.payment_array_timeSlot_day, self.frequency_array_timeSlot_day_original), axis=1)
-            payments = np.nan_to_num(payments)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                payments = np.nanmean(np.divide(self.payment_array_timeSlot_day, self.frequency_array_timeSlot_day_original), axis=1)
+                payments = np.nan_to_num(payments)
             payments = 100 * payments
 
         artificial_grid = pd.DataFrame({"ride_duration": travel_times, "objective_value": payments.tolist(), "ride_distance": distance_km, "tpep_pickup_datetime": self.clock.extended_horizon_end})

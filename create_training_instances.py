@@ -12,6 +12,7 @@ if __name__ == '__main__':
     args.mode = "create_training_instance"
     assert args.policy in ["policy_SB", "policy_CB"]
     args = util.set_additional_args(args)  # set additional args that automatically derive from set args
+    print(args)
 
     pipeline = Pipeline(args=args, random_state=numpy_random)
     pipeline.run()

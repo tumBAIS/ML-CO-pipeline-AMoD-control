@@ -11,7 +11,6 @@ import os
 import scipy.stats as st
 
 
-
 class Environment:
     def __init__(self, args, random_state):
         self.args = args
@@ -27,7 +26,6 @@ class Environment:
         if self.args.policy in ['policy_SB', 'policy_CB', 'sampling']:
             self.sampler = Sampler(args, self.clock, self.rebalancing_grid)
 
-
     def get_capacity_vertices(self, artRebVerticesList):
         capacity_nodes = pd.DataFrame(artRebVerticesList)
         capacity_nodes["type"] = "Capacity"
@@ -37,7 +35,6 @@ class Environment:
             capacity_nodes["counter"] = counter
             capacity_list.append(copy.deepcopy(capacity_nodes))
         return pd.concat(capacity_list).to_dict("records")
-
 
     def get_artificial_requests(self, for_training=False):
         if for_training or (self.args.mode == "create_training_instance" and self.args.policy == "policy_SB"):
@@ -55,7 +52,6 @@ class Environment:
         artRebVertices = artRebVertices.drop(columns=["x_min", "x_max", "y_min", "y_max", "in_NYC"])
         return artRebVertices
 
-
     def simulate_ride_requests(self, start=None, end=None, vertex_type="Request"):
         if start is None:
             start = self.clock.actual_system_time_period_start
@@ -69,7 +65,6 @@ class Environment:
         requestList = requestList.reset_index(drop=True)
         return requestList
 
-
     def extract_served_vertices(self, verticesIndexVehiclemapping, verticesList):
         # get satisfied requests
         boolean_vertices_in_solution = list(map(util.get_served_vertices, verticesIndexVehiclemapping))
@@ -78,7 +73,6 @@ class Environment:
         requests_in_solution = [request for request in vertices_in_solution if request["type"] == "Request"]
         locations_in_solution = [request for request in vertices_in_solution if request["type"] == "Location"]
         return vehicles_in_solution, requests_in_solution, locations_in_solution
-
 
     def get_distance_and_duration(self, location_lon_start, location_lat_start, location_lon_end, location_lat_end):
         look_up_index_start = self.look_up_grid.get_idx(location_lon_start, location_lat_start)
@@ -115,7 +109,6 @@ class Environment:
                                 "type": "Location"}
             dist_travelled_rebalancing = (driven_time / (duration_sec)) * distance_km
         return last_vertex_dict, dist_travelled_rebalancing
-
 
     def update_vehicle_list(self, vehicleTrips, verticesList, vehicleList, load_instance=False):
         # realize vehicle trips and set new vehicle locations, and on_trip_till values
@@ -179,7 +172,6 @@ class Environment:
                 vehicleList[vehicle_idx]["full_information_vertex_idx"] = vertex_idx
         return vehicleList, distance_driving_to_request + distance_transporting_request + distance_rebalancing
 
-
     def get_vehicle_occupied_sample_distribution(self):
         print("Here we have to reset the sample input file")
         sample_input_file = open(self.args.vehDistribution_directory + self.args.vehDistribution_file, "r")
@@ -192,7 +184,6 @@ class Environment:
         bernoulli_param = dist_dict.get("bernoulli_param")
 
         return distribution_name, loc, scale, arg, bernoulli_param
-
 
     def read_in_vehicle_data(self):
         print("We start reading in vehicle data ...")
@@ -257,7 +248,6 @@ class Environment:
             self.start_date = self.args.start_date
             self.end_date = self.args.end_date
 
-
     def read_in_taxi_trip_data(self):
         if self.args.mode == "create_training_instance":
             # get request list from full-information instances
@@ -265,5 +255,3 @@ class Environment:
         else:
             taxi_data = util.read_in_preprocessed_data(self.args, "/month-{:02}/trip_data_{}_{:02}_day-{:02}.csv".format(self.start_date.month, self.start_date.year, self.start_date.month, self.start_date.day - 1))
         return taxi_data
-
-

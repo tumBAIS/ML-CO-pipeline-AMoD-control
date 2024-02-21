@@ -14,7 +14,6 @@ class Graph_Generator_Cplusplus():
         self.Cplusplus_interface.heuristic_distance_range = self.args.heuristic_distance_range
         self.Cplusplus_interface.heuristic_time_range = self.args.heuristic_time_range
 
-
     def set_values(self, requestList, vehicleList, artRebVertexList):
         columns_requests = ["tpep_pickup_datetime", "location_lon", "location_lat", "index_Look_Up_Table_Pickup", "tpep_dropoff_datetime", "location_lon_dropoff", "location_lat_dropoff", "index_Look_Up_Table_Dropoff"]
         requestCplusplus = util.prepare_list_for_CPlusPlus(args=self.args, vertex_list=requestList, columns=columns_requests, date_columns=["tpep_pickup_datetime", "tpep_dropoff_datetime"])
@@ -46,7 +45,6 @@ class Graph_Generator_Cplusplus():
         self.Cplusplus_interface.col_lat_vehicle_destination = list(vehicleCplusplus.columns).index("location_lat")
         self.Cplusplus_interface.col_lon_artificialVertex_pickup = list(artRebVertexListCplusplus.columns).index("location_lon") if len(artRebVertexListCplusplus) > 0 else -1
         self.Cplusplus_interface.col_lat_artificialVertex_pickup = list(artRebVertexListCplusplus.columns).index("location_lat") if len(artRebVertexListCplusplus) > 0 else -1
-
 
     def calculateEdgesVehiclesRides(self):
         edges_vehicles_rides = self.Cplusplus_interface.calculateEdgesVehiclesRides()
@@ -91,7 +89,6 @@ class CombinatorialOptimizier():
         paths = CInstance.paths_edge_disjoint
         return [num_paths, paths]
 
-
 def callrunCalculateLoss(edges, all_edges_online, weights):
     CInstance = pybind11module.InstanceCalculateLoss()
     CInstance.edges = edges
@@ -101,7 +98,6 @@ def callrunCalculateLoss(edges, all_edges_online, weights):
     profit = CInstance.profit
     combinatorial_solution = CInstance.combinatorial_solution
     return profit, combinatorial_solution
-
 
 
 def get_cost_smooth_features(base_features, granularity_counter, time_span_sec, mean_travel_distancePerTime, costs_per_km, type):

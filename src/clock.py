@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 class Clock:
 
     def __init__(self, args, start_date, end_date, taxi_data):
