@@ -84,9 +84,9 @@ class Result_file():
             self.mode = "sampling"
         elif "greedy" in self.directory:
             self.mode = "greedy"
-        elif "policy_CB" in self.directory and "Linear" in self.directory:
+        elif "policy_CB" in self.directory and (("Linear" in self.directory) or ("NN" not in self.directory)):
             self.mode = "CB_Linear"
-        elif "policy_SB" in self.directory and "Linear" in self.directory:
+        elif "policy_SB" in self.directory and (("Linear" in self.directory) or ("NN" not in self.directory)):
             self.mode = "SB_Linear"
         elif "policy_CB" in self.directory and "NN" in self.directory:
             self.mode = "CB_NN"
@@ -96,7 +96,7 @@ class Result_file():
             self.mode = "offline"
 
     def get_iteration(self):
-        if self.mode in ["CB_Linear", "SB_Linear", "CB_NN", "SB_NN"]:
+        if self.mode in ["CB_Linear", "SB_Linear", "CB_GNN", "SB_GNN", "CB_NN", "SB_NN", "CB_GNNBack", "SB_GNNBack", "CB_GNNEdgespecific", "SB_GNNEdgespecific"]:
             self.iteration = int(self.filename.split("_it-")[-1].split("_")[0])
         else:
             self.iteration = -1
@@ -177,7 +177,7 @@ def choose_best_learning_iteration(saver):
         best_iteration_saver[mode] = OrderedDict()
         for x_tick in saver[mode].keys():
             best_value = -1
-            best_iteration = 1  #-1
+            best_iteration = 1  # -1
             for learning_iteration in saver[mode][x_tick].keys():
                 mean_value = sum(saver[mode][x_tick][learning_iteration]) / len(saver[mode][x_tick][learning_iteration])
                 if mean_value > best_value:
@@ -226,7 +226,6 @@ def convert_x_tick(x_tick):
 
 
 def create_result_saver(x_ticks, modes):
-
     results_saver = OrderedDict()
     for mode in modes:
         results_saver[mode] = OrderedDict()
@@ -260,43 +259,49 @@ def set_best_learning_iteration(saver, best_learning_iteration):
 
 
 def get_y_lim(metric, type):
-    y_lim_saver = {"service_ratio": {"ratio": (-13, 15)}, "km_per_request": {"ratio": (0, 120)},  "avg_distance_trav": {"ratio": (0, 80)}}
+    y_lim_saver = {"service_ratio": {"ratio": (-13, 15)}, "km_per_request": {"ratio": (0, 120)}, "avg_distance_trav": {"ratio": (0, 80)}}
     return y_lim_saver[metric][type]
 
 
-def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=False):
+def plot(saver, type, metric, x_label, running_type, show_metric, boxplot=False, twitter=False):
     tikzplotlib_axis_parameters = {"samplingHyperparameterSelection": ["xmajorticks=true", "xlabel style={below=12mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
                                                                        "ytick style={draw=none}"],
                                    "samplingReduceFutureSelect": ["xmajorticks=true", "xlabel style={align=center, below=7.7mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true",
                                                                   "xtick style={draw=none}", "ytick style={draw=none}"],
                                    "hyperparameterOffline_distance": ["xmajorticks=true", "xlabel style={below=6mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
-                                                                       "ytick style={draw=none}"],
+                                                                      "ytick style={draw=none}"],
                                    "hyperparameterOffline_time": ["xmajorticks=true", "xlabel style={below=6mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
-                                                                       "ytick style={draw=none}"],
+                                                                  "ytick style={draw=none}"],
                                    "testmaxcapacity": ["xmajorticks=true", "xlabel style={align=center, below=5.8mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
-                                                "ytick style={draw=none}"],
-                                   "hyperparameterSelection": ["xmajorticks=true", "xlabel style={below=11mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}", "ytick style={draw=none}"],
+                                                       "ytick style={draw=none}"],
+                                   "hyperparameterSelection": ["xmajorticks=true", "xlabel style={below=11mm}", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}",
+                                                               "ytick style={draw=none}"],
                                    "absolute": ["xmajorticks=true", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=true", "xtick style={draw=none}", "ytick style={draw=none}"],
                                    "ratio": ["xmajorticks=true", "ymajorticks=true", "ylabel style={align=center}", "scaled y ticks=false", "y tick label style={/pgf/number format/fixed}", "xtick style={draw=none}",
                                              "ytick style={draw=none}"]}
 
-
-
     patches_dict = {"vehicleTest": {"profit": {"absolute": (((1800, 31000), 400, 34000), (1700, 27000)),
                                                "ratio": (((1800, -1.5), 400, 10), (2300, 6))},
-                               "amount_satisfied_customers": {"absolute": (((1800, 2.8), 400, 3.2), (1700, 2.5)),
-                                                              "ratio": (((1800, -1), 400, 10), (1700, -2.5))}},
-               "sparsityTest": {"profit": {"absolute": (((0.26, 31000), 0.08, 45000), (0.25, 25000)), "ratio": (((0.26, -2), 0.08, 9.5), (0.14, 8.3))}}}
-
+                                    "amount_satisfied_customers": {"absolute": (((1800, 2.8), 400, 3.2), (1700, 2.5)),
+                                                                   "ratio": (((1800, -1), 400, 10), (1700, -2.5))}},
+                    "sparsityTest": {"profit": {"absolute": (((0.26, 31000), 0.08, 45000), (0.25, 25000)), "ratio": (((0.26, -2), 0.08, 9.5), (0.14, 8.3))}}}
 
     visualization = {
         "greedy": {"color": "#98C6EA", "marker": "o", "label": "greedy"},
         "sampling": {"color": "#005293", "marker": "*", "label": "sampling"},
         "offline": {"color": "#003359", "marker": "+", "label": "FI"},
         "SB_Linear": {"color": "#E37222", "marker": "v", "label": "SBLinear"},
-        "CB_Linear":{"color": "#A2AD00", "marker": "x", "label": "CBLinear"},
+        "CB_Linear": {"color": "#A2AD00", "marker": "x", "label": "CBLinear"},
         "SB_NN": {"color": "red", "marker": "v", "label": "SBNN"},
-        "CB_NN": {"color": "black", "marker": "x", "label": "CBNN"}
+        "CB_NN": {"color": "black", "marker": "x", "label": "CBNN"},
+        "SB_GNN": {"color": "red", "marker": "v", "label": "SBGNN"},
+        "CB_GNN": {"color": "black", "marker": "x", "label": "CBGNN"},
+        "SB_GNNBack": {"color": "red", "marker": "v", "label": "SBGNNBack"},
+        "CB_GNNBack": {"color": "black", "marker": "x", "label": "CBGNNBack"},
+        "SB_GNNEdgespecific": {"color": "red", "marker": "v", "label": "SBGNNEdgespecific"},
+        "CB_GNNEdgespecific": {"color": "black", "marker": "x", "label": "CBGNNEdgespecific"}
+        # "SB_Linear": {"color": "#E37222", "marker": "v", "label": "SB_Linear"},
+        # "CB_Linear": {"color": "#A2AD00", "marker": "x", "label": "CB_Linear"}
     }
     x_label_name = {"num_vehicles": "Fleet size", "extended_horizon": "Extended horizon [hour:min:sec]",
                     "reduce_weight_of_future_requests_factor": "Factor reducing weights \\\\ to requests in prediction horizon",
@@ -327,15 +332,15 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=Fals
         subtrahend = {key: 0 for (key, value) in saver[modes[0]].items()}
         label_suffix = ""
         factor = 1
-        if metric == "profit":
+        if show_metric == "profit":
             y_label = 'Profit [\$]'
-        elif metric == "amount_satisfied_customers":
+        elif show_metric == "amount_satisfied_customers":
             y_label = 'Number of satisfied ride requests \\\\ in 1000'
-        elif metric == "service_ratio":
+        elif show_metric == "service_ratio":
             y_label = "Service rate [%]"
-        elif metric == "km_per_request":
+        elif show_metric == "km_per_request":
             y_label = "avg. km per request [km]"
-        elif metric == "avg_distance_trav":
+        elif show_metric == "avg_distance_trav":
             y_label = "avg. km per vehicle [km]"
     elif type == "ratio":
         denominator = saver["greedy"]
@@ -344,18 +349,18 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=Fals
         factor = 100
         modes.remove("greedy")
         modes.remove("offline")
-        if metric == "profit":
+        if show_metric == "profit":
             if twitter:
                 y_label = 'Increase of profit \n compared to greedy bench. [%]'
             else:
                 y_label = 'Increase of profit \\\\ compared to greedy bench. [%]'
-        elif metric == "amount_satisfied_customers":
+        elif show_metric == "amount_satisfied_customers":
             y_label = 'Increase of num. sat. ride req. \\\\ compared to greedy bench. [%]'
-        elif metric == "service_ratio":
+        elif show_metric == "service_ratio":
             y_label = "Increase of num. of service rate \\\\ compared to greedy bench. [%]"
-        elif metric == "km_per_request":
+        elif show_metric == "km_per_request":
             y_label = "Increase of avg. km per request \\\\ compared to greedy bench. [%]"
-        elif metric == "avg_distance_trav":
+        elif show_metric == "avg_distance_trav":
             y_label = "Increase of avg. km per vehicle \\\\ compared to greedy bench. [%]"
     else:
         raise Exception("Wrong type defined!")
@@ -363,7 +368,7 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=Fals
     for mode in modes:
         if boxplot:
             if running_type in ["samplingHyperparameterSelection", "hyperparameterSelection"]:
-                x_labels = [f"0{str(timedelta(seconds=minutes * 60))}" for minutes in list(saver[mode].keys())]
+                x_labels = [f"0{str(timedelta(seconds=minutes[0] * 60))}" for minutes in list(saver[mode].keys())]
             else:
                 x_labels = [minutes for minutes in list(saver[mode].keys())]
             ax.boxplot(saver[mode].values(), positions=list(range(len(saver[mode].values()))), patch_artist=True)
@@ -379,15 +384,17 @@ def plot(saver, type, metric, x_label, running_type, boxplot=False, twitter=Fals
                 print("Comparison : " + mode + " / greedy" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison : " + mode + " / sampling" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison MAX : " + mode + " / greedy" + ": " + str(np.max([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in saver[mode].keys()]])))
-                print("Comparison MAX : " + mode + " / sampling" + ": " + str(np.max([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
+                print(
+                    "Comparison MAX : " + mode + " / sampling" + ": " + str(np.max([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("Comparison MIN : " + mode + " / greedy" + ": " + str(np.min([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in saver[mode].keys()]])))
-                print("Comparison MIN : " + mode + " / sampling" + ": " + str(np.min([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
+                print(
+                    "Comparison MIN : " + mode + " / sampling" + ": " + str(np.min([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in saver[mode].keys()]])))
                 print("WE NEED TO ENABLE THIS!!!!!!")
-                if running_type == "sparsityTest":
-                    print("Comparison 0.4 : " + mode + " / greedy" + ": " + str(factor * (saver[mode][0.4] - saver["greedy"][0.4]) / saver["greedy"][0.4]))
-                    print("Comparison 0.4 : " + mode + " / sampling" + ": " + str(factor * (saver[mode][0.4] - saver["sampling"][0.4]) / saver["sampling"][0.4]))
-                    print("Comparison HIGHER : " + mode + " / greedy" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
-                    print("Comparison HIGHER : " + mode + " / sampling" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
+                # if running_type == "sparsityTest":
+                #    print("Comparison 0.4 : " + mode + " / greedy" + ": " + str(factor * (saver[mode][0.4] - saver["greedy"][0.4]) / saver["greedy"][0.4]))
+                #    print("Comparison 0.4 : " + mode + " / sampling" + ": " + str(factor * (saver[mode][0.4] - saver["sampling"][0.4]) / saver["sampling"][0.4]))
+                #    print("Comparison HIGHER : " + mode + " / greedy" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["greedy"][x_tick]) / saver["greedy"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
+                #    print("Comparison HIGHER : " + mode + " / sampling" + ": " + str(np.mean([factor * x for x in [(saver[mode][x_tick] - saver["sampling"][x_tick]) / saver["sampling"][x_tick] for x_tick in [0.4, 0.5, 0.6, 0.7, 1.0]]])))
     plt.xlabel([x_label_name[x_lab] for x_lab in x_label])
     plt.ylabel(y_label)
     plt.legend()
@@ -496,7 +503,7 @@ class ArgsKeeper():
             elif key == "num_layers":
                 self.num_layers = value
             elif key == "hidden_units":
-                self.hidden_units = value #[value] * 2
+                self.hidden_units = value  # [value] * 2
             elif key == "model":
                 self.model = value
 
@@ -559,32 +566,38 @@ def update_conditions(conditions, x_ticks):
     return condition_new
 
 
-def visualize_results(conditions, running_type, metric, twitter=False, running_type_validation=None):
+def visualize_results(conditions, running_type, metric, result_directory, twitter=False, running_type_validation=None, show_metric=None):
+    if not show_metric:
+        show_metric = metric
+
     if running_type_validation is None:
         running_type_validation = running_type
     args_keeper = get_metadata(conditions)
     conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
 
-    test_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type}_test")
-    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type_validation}_validation")
+    # test_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_original_saver/results_{running_type}_test")
+    # validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_original_saver/results_{running_type_validation}_validation")
+
+    test_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./{result_directory}/results_{running_type}_test")
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./{result_directory}/results_{running_type_validation}_validation")
 
     test_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
     validation_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
     validation_results_saver = fill_saver(validation_directories, validation_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     best_learning_iteration = choose_best_learning_iteration(validation_results_saver)
-    test_results_saver = fill_saver(test_directories, test_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
+    test_results_saver = fill_saver(test_directories, test_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, show_metric)
     test_results_saver = set_best_learning_iteration(test_results_saver, best_learning_iteration)
     test_results_saver = sort_directories(test_results_saver)
     test_results_saver = divide_by_value(test_results_saver, metric)
     results_saver = replace_with_mean(test_results_saver)
 
-    plot(results_saver, type="ratio", metric=metric, x_label=args_keeper.x_labels, running_type=running_type)
+    plot(results_saver, type="ratio", metric=metric, x_label=args_keeper.x_labels, running_type=running_type, show_metric=show_metric)
 
 
-def evaluate_hyperparameters(conditions, running_type, metric):
+def evaluate_hyperparameters(conditions, running_type, metric, result_directory):
     args_keeper = get_metadata(conditions)
     conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
-    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_deeplearning_20240210/results_{running_type}_validation")
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./{result_directory}/results_{running_type}_validation")
     hyperparameters_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
     hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     best_learning_iteration = choose_best_learning_iteration(hyperparameters_results_saver)
@@ -593,16 +606,15 @@ def evaluate_hyperparameters(conditions, running_type, metric):
     hyperparameters_results_saver = divide_by_value(hyperparameters_results_saver, metric)
 
     for key in hyperparameters_results_saver.keys():
-        best_hyp = max(hyperparameters_results_saver[key], key= lambda x: np.mean(hyperparameters_results_saver[key][x]))
+        best_hyp = max(hyperparameters_results_saver[key], key=lambda x: np.mean(hyperparameters_results_saver[key][x]))
         print(f"The best hyperparameters in {key} are {best_hyp} with: {np.mean(hyperparameters_results_saver[key][best_hyp])}.")
 
-    plot(hyperparameters_results_saver, type="absolute", metric=metric, x_label=args_keeper.x_labels, boxplot=True, running_type=running_type)
+    plot(hyperparameters_results_saver, type="absolute", metric=metric, x_label=args_keeper.x_labels, boxplot=True, running_type=running_type, show_metric=metric)
     results_saver = replace_with_mean(hyperparameters_results_saver)
-    #plot(results_saver, type="ratio", metric=metric, x_label=x_label, running_type=running_type)
+    # plot(results_saver, type="ratio", metric=metric, x_label=x_label, running_type=running_type)
 
 
 def extract_learned_parameters(conditions, running_type, metric, directory_parameters):
-
     if "condition_SB" in conditions.keys():
         learning_type = "SB"
     else:
@@ -657,10 +669,10 @@ def extract_learned_parameters(conditions, running_type, metric, directory_param
     def get_name(parameter_name):
         if "smooth_cost" in parameter_name:
             idx = int(parameter_name.split("_")[2])
-            return "est. fut. cost at d.off loc. +[{},{})min".format(2*(idx-1), 2*idx)
+            return "est. fut. cost at d.off loc. +[{},{})min".format(2 * (idx - 1), 2 * idx)
         if "smooth_revenue" in parameter_name:
             idx = int(parameter_name.split("_")[2])
-            return "est. fut. rew. at d.off loc. +[{},{})min".format(2*(idx-1), 2*idx)
+            return "est. fut. rew. at d.off loc. +[{},{})min".format(2 * (idx - 1), 2 * idx)
         for key in translate_parameter_names.keys():
             if key in parameter_name:
                 return translate_parameter_names[key]
@@ -708,12 +720,13 @@ def extract_learned_parameters(conditions, running_type, metric, directory_param
             index_two = index_one + length_column
             if index_two < length_list:
                 try:
-                    print(str(index_one) + " & " + get_name(keys_list[index_one]) + " & " + str(round_number(parameter_list[index_one])) + " & " + str(index_two) + " & " + get_name(keys_list[index_two]) + " & " + str(round_number(parameter_list[index_two])) +"\\\\")
+                    print(str(index_one) + " & " + get_name(keys_list[index_one]) + " & " + str(round_number(parameter_list[index_one])) + " & " + str(index_two) + " & " + get_name(keys_list[index_two]) + " & " + str(
+                        round_number(parameter_list[index_two])) + "\\\\")
                 except:
                     print('\033[93m' + keys_list[index_one] + "|" + keys_list[index_two] + '\033[0m')
             else:
                 try:
-                    print(str(index_one) + " & " + get_name(keys_list[index_one]) + " & " + str(round_number(parameter_list[index_one])) + " & & & "  + "\\\\")
+                    print(str(index_one) + " & " + get_name(keys_list[index_one]) + " & " + str(round_number(parameter_list[index_one])) + " & & & " + "\\\\")
                 except:
                     print('\033[93m' + keys_list[index_one] + '\033[0m')
         print("\\toprule")
@@ -725,10 +738,25 @@ def extract_learned_parameters(conditions, running_type, metric, directory_param
 \\clearpage")
 
 
-def get_computational_time(conditions, running_type, metric):
-    validation_directories, x_label, modes = generate_relevant_directories(conditions, result_directory=f"./results_LRZ/results_{running_type}_validation")
-    hyperparameters_results_saver = create_result_saver(x_ticks=conditions["condition_general"][x_label], modes=modes)
-    hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, x_label, metric)
+def get_computational_time(conditions, running_type, metric, result_directory, show_metric=None):
+    """args_keeper = get_metadata(conditions)
+    conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./results_LRZ/results_{running_type}_validation")
+    hyperparameters_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
+    best_learning_iteration = choose_best_learning_iteration(hyperparameters_results_saver)
+    hyperparameters_results_saver = set_best_learning_iteration(hyperparameters_results_saver, best_learning_iteration)
+    hyperparameters_results_saver = sort_directories(hyperparameters_results_saver)
+    computational_time = divide_by_value(hyperparameters_results_saver, metric)"""
+
+    if not show_metric:
+        show_metric = metric
+
+    args_keeper = get_metadata(conditions)
+    conditions = update_conditions(conditions, x_ticks=args_keeper.x_ticks)
+    validation_directories = generate_relevant_directories(args_keeper, conditions, result_directory=f"./{result_directory}/results_{running_type}_validation")
+    hyperparameters_results_saver = create_result_saver(x_ticks=args_keeper.x_ticks, modes=args_keeper.modes)
+    hyperparameters_results_saver = fill_saver(validation_directories, hyperparameters_results_saver, conditions, args_keeper.modes, args_keeper.x_ticks, args_keeper.x_labels, metric)
     best_learning_iteration = choose_best_learning_iteration(hyperparameters_results_saver)
     hyperparameters_results_saver = set_best_learning_iteration(hyperparameters_results_saver, best_learning_iteration)
     hyperparameters_results_saver = sort_directories(hyperparameters_results_saver)
@@ -739,7 +767,7 @@ def get_computational_time(conditions, running_type, metric):
     print("\\\\")
     print("\hline \hline")
     for mode in computational_time.keys():
-        print(mode, end = '')
+        print(mode, end='')
         for x_label in computational_time[mode]:
             print(" & " + str(np.round(np.mean(computational_time[mode][x_label]), decimals=3)), end='')
         print("\\\\")
@@ -767,7 +795,6 @@ def show_learning_evolution(parameter_directory, inner_evaluation, outer_evaluat
             if parameters_identical(outer_parameters, inner_parameters):
                 outer_epochs.append(epoch_idx)
                 outer_evaluation["loss_evolution"].append(inner_evaluation_values["loss_evolution"][epoch_idx])
-
 
     plt.plot(inner_evaluation_values["loss_evolution"], color="blue")
     plt.scatter(outer_epochs, outer_evaluation["loss_evolution"], color="red")
@@ -803,7 +830,7 @@ def sanity_check(sanity_directory, policy):
     x_NN, y_NN = zip(*sorted(sanity_value_FY_dict["NN"].items()))
     plt.plot(x_NN, y_NN, color="red", label="Loss~NN~model")
     plt.legend()
-    #plt.title(policy)
+    # plt.title(policy)
     plt.ylabel("Loss value")
     plt.xlabel("Fleet size")
 
@@ -860,163 +887,146 @@ if __name__ == '__main__':
     os.chdir('../')
 
     ### HYPERPARAMETER_SAMPLING_BENCHMARK
-    """evaluate_hyperparameters(conditions={"condition_general": {"extended_horizon": [timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15), timedelta(minutes=20), timedelta(minutes=25), timedelta(minutes=30)],
-                                                               "objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3", "reduce_weight_of_future_requests_factor": "0.2"},
-                                         "condition_sampling": {"policy": "sampling"}},
-                                         running_type="samplingHyperparameterSelection", metric="profit")
+    evaluate_hyperparameters(
+        conditions={"condition_general": {"extended_horizon": [timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15), timedelta(minutes=20), timedelta(minutes=25), timedelta(minutes=30)],
+                                          "objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3",
+                                          "reduce_weight_of_future_requests_factor": "0.2"},
+                    "condition_sampling": {"policy": "sampling"}},
+        running_type="samplingHyperparameterSelection", metric="profit", result_directory="results/results")
 
     evaluate_hyperparameters(conditions={"condition_general": {
-        "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": ["1.0", "0.9", "0.9", "0.8", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1"],
+        "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": ["1.0", "0.9", "0.8", "0.7", "0.6", "0.5", "0.4", "0.3", "0.2", "0.1"],
         "objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                         "condition_sampling": {"policy": "sampling"}},
-                             running_type="samplingReduceFutureSelect", metric="profit")
+        "condition_sampling": {"policy": "sampling"}},
+        running_type="samplingReduceFutureSelect", metric="profit", result_directory="results/results")
 
     ### HYPERPARAMETER OFFLINE
-    evaluate_hyperparameters(conditions={"condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "100000000.0", "heuristic_distance_range": ["0.3", "0.5", "0.7", "0.9", "1.1", "1.3", "1.5", "1.7"], "sparsity_factor": "0.3"},
+    evaluate_hyperparameters(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "100000000.0", "heuristic_distance_range": ["0.3", "0.5", "0.7", "0.9", "1.1", "1.3", "1.5", "1.7"],
+                              "sparsity_factor": "0.3"},
         "condition_offline": {"policy": "offline"}},
-        running_type="hyperparameterOffline_distance", metric="profit")
+                             running_type="hyperparameterOffline_distance", metric="profit", result_directory="results/results")
 
     evaluate_hyperparameters(conditions={
         "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": ["120.0", "180.0", "360.0", "540.0", "720.0", "900.0"], "heuristic_distance_range": "200.0",
                               "sparsity_factor": "0.3"},
         "condition_offline": {"policy": "offline"}},
-                             running_type="hyperparameterOffline_time", metric="profit")
+        running_type="hyperparameterOffline_time", metric="profit", result_directory="results/results")
+
+    ### HYPERPARAMETER CB AND SB POLICIES
+    evaluate_hyperparameters(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
+                              "sparsity_factor": "0.3", "extended_horizon": [timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15), timedelta(minutes=20), timedelta(minutes=25), timedelta(minutes=30)]},
+        "condition_SB_Linear": {"policy": "policy_SB", "standardization": "0"}},
+        running_type="hyperparameterSelection", metric="profit", result_directory="results/results")
 
     evaluate_hyperparameters(conditions={
         "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
                               "sparsity_factor": "0.3", "extended_horizon": [timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15), timedelta(minutes=20), timedelta(minutes=25), timedelta(minutes=30)]},
-        "condition_SB": {"policy": "policy_SB", "standardization": "0"}},
-        running_type="hyperparameterSelection", metric="profit")
-
-    evaluate_hyperparameters(conditions={
-        "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
-                              "sparsity_factor": "0.3", "extended_horizon": [timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15), timedelta(minutes=20), timedelta(minutes=25), timedelta(minutes=30)]},
-        "condition_CB": {"policy": "policy_CB", "standardization": "100", "fix_capacity": "1"}},
-        running_type="hyperparameterSelection", metric="profit")
-
+        "condition_CB_Linear": {"policy": "policy_CB", "standardization": "100", "fix_capacity": "1"}},
+        running_type="hyperparameterSelection", metric="profit", result_directory="results/results")
 
     evaluate_hyperparameters(conditions={
         "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "fix_capacity": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
                               "sparsity_factor": "0.3"},
-        "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100"}},
-                             running_type="testmaxcapacity", metric="profit")"""
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100"}},
+        running_type="testmaxcapacity", metric="profit", result_directory="results/results")
 
-    # Hyperparameter deep learning
-    """evaluate_hyperparameters(conditions={
-        "condition_general": {"objective": "profit", "num_vehicles": "5000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
-                              "sparsity_factor": "0.3", "extended_horizon": timedelta(minutes=5),
-                              "learning_rate": ["0.1", "0.001"], "hidden_units": ["10.0", "1000.0"], "num_layers": ["0", "3"],
-                              "normalization": "0", "standardization": ["100", "0"]},
-        "condition_SB_NN": {"policy": "policy_SB", "model": "NN"}},
-        running_type="hyperparameterDeepLearning", metric="profit")"""
+    # EVALUATE DIFFERENT VEHICLE FLEET SIZES
+    visualize_results(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+                      running_type="vehicleTest", metric="profit", result_directory="results/results")
 
-    """evaluate_hyperparameters(conditions={
-        "condition_general": {"objective": "profit", "num_vehicles": "5000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
-                              "sparsity_factor": "0.3", "extended_horizon": timedelta(minutes=5),
-                              "learning_rate": ["0.1", "0.001"], "hidden_units": ["10.0", "1000.0"], "num_layers": ["0", "3"],
-                              "normalization": "0", "standardization": ["100", "0"]},
-        "condition_CB_NN": {"policy": "policy_CB", "fix_capacity": "1", "model": "NN"}},
-        running_type="hyperparameterDeepLearning", metric="profit")"""
-
-    """evaluate_hyperparameters(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
-                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}},
-        running_type="vehicleTest", metric="profit")"""
-
-    """evaluate_hyperparameters(conditions={
+    # EVALUATE DIFFERENT VEHICLE FLEET SIZES and DEEP LEARNING BENCHMARKS
+    visualize_results(conditions={
         "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
         "condition_greedy": {"policy": "greedy"},
         "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
         "condition_offline": {"policy": "offline"},
         "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
-        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}},
-        #"condition_SB_NN": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "NN", "learning_rate": "0.005", "hidden_units": "50.0"},
-        #"condition_CB_NN": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.05", "hidden_units": "10.0"}},
-                             running_type="vehicleTest", metric="profit")"""
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"},
+        "condition_SB_NN": {
+            ("500",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "10.0", "normalization": "0"},
+            ("1000",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0",
+                        "normalization": "0"},
+            ("2000",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0",
+                        "normalization": "0"},
+            ("3000",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0",
+                        "normalization": "0"},
+            ("4000",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
+            ("5000",): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0",
+                        "normalization": "0"}},
+        "condition_CB_NN": {
+            ("500",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0",
+                       "normalization": "0"},
+            ("1000",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0",
+                        "normalization": "0"},
+            ("2000",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0",
+                        "normalization": "0"},
+            ("3000",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0",
+                        "normalization": "0"},
+            ("4000",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0",
+                        "normalization": "0"},
+            ("5000",): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0",
+                        "normalization": "0"}}},
+        running_type="vehicleTestHyperparameter", running_type_validation="vehicleTestHyperparameter", metric="profit", result_directory="results/results_deeplearning")
 
-    """get_computational_time(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.95"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                  "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="calculation_time")"""
-
-    # EVALUATE DIFFERENT VEHICLE FLEET SIZES
-    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
-                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"}}, running_type="vehicleTest", metric="profit")"""
-
-
-    # EVALUATE DIFFERENT VEHICLE FLEET SIZES and DEEP LEARNING BENCHMARKS
-    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
-                                  "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"},
-                                  "condition_SB_NN": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "NN", "learning_rate": "0.005", "hidden_units": "50.0"},
-                                  "condition_CB_NN": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.05", "hidden_units": "10.0"}},
-                      running_type="vehicleTest", metric="profit")"""
-
-    """visualize_results(conditions={
-            "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-            "condition_greedy": {"policy": "greedy"},
-            "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-            "condition_offline": {"policy": "offline"},
-            "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0", "model": "Linear"},
-            "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1", "model": "Linear"},
-            "condition_SB_NN": {("500", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "10.0", "normalization": "0"},
-                                ("1000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
-                                ("2000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
-                                ("3000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"},
-                                ("4000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
-                                ("5000", ): {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "model": "NN", "learning_rate": "0.001", "hidden_units": "1000.0", "normalization": "0"}},
-            "condition_CB_NN": {("500", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
-                                ("1000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
-                                ("2000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
-                                ("3000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "0", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "10.0", "normalization": "0"},
-                                ("4000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "0", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"},
-                                ("5000", ): {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "num_layers": "3", "standardization": "100", "fix_capacity": "1", "model": "NN", "learning_rate": "0.1", "hidden_units": "1000.0", "normalization": "0"}}},
-                          running_type="vehicleTestHyperparameter", running_type_validation="vehicleTestHyperparameter", metric="profit")"""
-
-    """visualize_results(conditions={
-        "condition_general": {"objective": "amount_satisfied_customers", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+    # THIS BRINGS AMOUNT SATISFIED CUSTOMERS RESULTS
+    visualize_results(conditions={
+        "condition_general": {"objective": "amount_satisfied_customers", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
+                              "sparsity_factor": "0.3"},
         "condition_greedy": {"policy": "greedy"},
         "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
         "condition_offline": {"policy": "offline"},
-        "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-        "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="amount_satisfied_customers")"""
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+        running_type="vehicleTest", metric="amount_satisfied_customers",
+        result_directory="results/results")
 
+    # THIS BRINGS SPARSITY RESULTS
+    visualize_results(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": "2000", "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5",
+                              "sparsity_factor": ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "1.0"]},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+        running_type="sparsityTest", metric="profit",
+        result_directory="results/results")
 
     ### EVALUATE DIFFERENT METRICS
-    """visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                  "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="service_ratio")
+    visualize_results(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+                      running_type="vehicleTest", metric="profit", result_directory="results/results", show_metric="service_ratio")
 
-    visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                  "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="km_per_request")
+    visualize_results(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+                      running_type="vehicleTest", metric="profit", result_directory="results/results", show_metric="km_per_request")
 
-    visualize_results(conditions={"condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
-                                  "condition_greedy": {"policy": "greedy"},
-                                  "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
-                                  "condition_offline": {"policy": "offline"},
-                                  "condition_SB": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
-                                  "condition_CB": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}}, running_type="vehicleTest", metric="avg_distance_trav")"""
-
-
+    visualize_results(conditions={
+        "condition_general": {"objective": "profit", "num_vehicles": ["500", "1000", "2000", "3000", "4000", "5000"], "heuristic_time_range": "720.0", "heuristic_distance_range": "1.5", "sparsity_factor": "0.3"},
+        "condition_greedy": {"policy": "greedy"},
+        "condition_sampling": {"policy": "sampling", "extended_horizon": timedelta(minutes=5), "reduce_weight_of_future_requests_factor": "0.2"},
+        "condition_offline": {"policy": "offline"},
+        "condition_SB_Linear": {"policy": "policy_SB", "extended_horizon": timedelta(minutes=5), "standardization": "0"},
+        "condition_CB_Linear": {"policy": "policy_CB", "extended_horizon": timedelta(minutes=5), "standardization": "100", "fix_capacity": "1"}},
+                      running_type="vehicleTest", metric="profit", result_directory="results/results", show_metric="avg_distance_trav")
 
     ### SHOW LEARNED PARAMETERS
     # SLCA
@@ -1045,8 +1055,8 @@ if __name__ == '__main__':
                             inner_evaluation=f"Learning-obj-profit_hoSi-5.0_fleetSi-4000_pert-50.0,1.0_m-NN_lr-0.1_hu-1000.0_nrm-0_nl-3", outer_evaluation=None)"""
 
     # SANITY CHECK
-    """sanity_check(sanity_directory="./sanity_check_20240212/", policy="policy_CB")
-    sanity_check(sanity_directory="./sanity_check_20240212/", policy="policy_SB")"""
+    sanity_check(sanity_directory="./results/sanity_check/", policy="policy_CB")
+    sanity_check(sanity_directory="./results/sanity_check/", policy="policy_SB")
 
-    """sanity_check_performance(sanity_performance_directory="./sanity_check_performance_20240212/", policy="policy_CB")
-    sanity_check_performance(sanity_performance_directory="./sanity_check_performance_20240212/", policy="policy_SB")"""
+    sanity_check_performance(sanity_performance_directory="./results/sanity_check_performance/", policy="policy_CB")
+    sanity_check_performance(sanity_performance_directory="./results/sanity_check_performance/", policy="policy_SB")

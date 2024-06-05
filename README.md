@@ -15,9 +15,11 @@ This repository contains all relevant scripts and data sets to reproduce the res
 The structure of the repository is as follows:
 - `cplusplus`: contains a C++ interface to run computationally intensive functions in C++
 - `data`: contains all relevant data to reproduce the data
+- `full_information_solutions`: contains all full_information solution instances. Please unpack the .zip folder.
 - `learning_problem`: contains learning files to solve the structured learning problem
 - `pipeline`: contains code which specifies the objects of the pipeline
 - `prep`: contains code to preprocess the data
+- `results`: contains the result directories in .zip format. Please unpack the .zip folders.
 - `src`: contains helper files
 - `visualization`: contains scripts to reproduce plots and gif
 - `create_full_information_solution.py`: Script to solve a full-information problem
@@ -69,6 +71,7 @@ The script automatically evaluates the *offline*, *sampling*, and *offline* benc
 
 
 ## Visualization
+Note: We uploaded the result files in the .zip format. Please first unpack the directories before running the visualization scripts.
 - `visualization/visualization_results.py:` generates the plots from the paper
 - `visualization/visualization_gif.py`: generates the gif presented on the top of this page
 - `visualization/visualization_heatmap.py:` generates the heatmap from the paper showcasing the vehicle distribution for the different benchmarks (Requirement is to first run `visualization/visualization_gif`).
