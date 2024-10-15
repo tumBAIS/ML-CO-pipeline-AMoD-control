@@ -6,6 +6,9 @@
 #include <deque>
 #include <iostream>
 
+
+// This code is copied from the paper: A polynomial-time algorithm for user-based relocation in free-floating car sharing systems - https://doi.org/10.1016/j.trb.2020.11.001
+
 /**
  * A compressed parse row graph implementation, allowing only to iterate over outgoing edges.
  * For a short intro to compressed parse row graphs:
@@ -144,17 +147,6 @@ bool bellman_ford(CSRGraph<Vertex, Weight> &graph, Vertex source, std::vector<Ve
     return true;
 }
 
-/**
- *
- * @tparam Vertex : sind diese hier wichtig oder können die raus / ersetzt werden?
- * @tparam Weight : sind diese hier wichtig oder können die raus / ersetzt werden?
- * @param num_vertices: [unsigned int]: number of vertices
- * @param _edges: [std::vector<std:pair>]: vector of ints: each entry has first (from_ vertex) and second (to_ vertex) attribute ("key" is index)
- * @param _weights: [std::vector<int>]: vector of ints with weights for edges ("key" is index)
- * @param k: [int]: was ist k?
- * @return wie ist der Return aufgebaut?
- */
-
 
 template<class Vertex, class Weight>
 auto kdisjoint_shortest_path(Vertex num_vertices, std::vector<std::pair<Vertex, Vertex>> &_edges,
@@ -238,7 +230,6 @@ auto kdisjoint_shortest_path(Vertex num_vertices, std::vector<std::pair<Vertex, 
     auto D = L[graph.sink()];
 
     // Interlacing Construction
-
     // find I = node in C with the minimal distance
     while(!C.empty()) {
         auto[weight, I] = C.top();
@@ -262,13 +253,6 @@ auto kdisjoint_shortest_path(Vertex num_vertices, std::vector<std::pair<Vertex, 
 
                 if (J != 0) {
                     auto T = t_s[J]; // find T = node following J on P_M
-//                    auto T = 0; // find T = node following J on P_M
-//                    for (auto j = 1; j < graph.num_nodes(); ++j) {// TODO store successor for constant access?
-//                        if (j != Q && t[j] == J) {
-//                            T = j;
-//                            break;
-//                        }
-//                    }
                     t_s[J] = Q;
 
                     if(p_in_S[T]) {

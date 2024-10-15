@@ -98,5 +98,4 @@ paths_solution.clear();
 
 
 return std::make_pair(succ_routes, paths_solutions);
-//return std::make_pair(succ_routes, std::move(solution));
 }

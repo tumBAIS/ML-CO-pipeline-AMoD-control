@@ -7,3 +7,6 @@ source_data_visualization/
 source_data_visualization_heatmap/
 training_instances
 visualization/evaluate*
+cplusplus/.idea
+cplusplus/cmake-build-debug
+cplusplus/cmake-build-release

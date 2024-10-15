@@ -7,7 +7,12 @@ This method is proposed in:
 Control. arXiv preprint: [arXiv:2302.03963](https://arxiv.org/abs/2302.03963), 2023.
 
 
-This repository contains all relevant scripts and data sets to reproduce the results from the paper. We assume using *slurm*.
+This repository contains all relevant scripts and data sets to reproduce the results from the paper.  
+We assume using *slurm*.
+We used Python version 3.8.10.  
+We used g++ version 9.4.0.
+We run the code on a Linux Ubuntu system.  
+We thank Gerhard Hiermann to provide us the code from the paper [A polynomial-time algorithm for user-based relocation in free-floating car sharing systems](https://doi.org/10.1016/j.trb.2020.11.001) via git https://github.com/tumBAIS/kdsp-cpp. We used this code to calculate the k-dSPP solution.  
 
 ![](./visualization/movie_numVeh300_09-10.gif)
 
